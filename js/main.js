@@ -1009,8 +1009,16 @@ function init() {
     renderSeats();
   }));
   $('#btn-new').addEventListener('click', () => {
-    if (!app.prefs.seats.slice(0, app.prefs.playerCount).some((s) => !s.isAI) && !confirm('사람 플레이어가 없습니다. 컴퓨터끼리 대결을 관전할까요?')) return;
-    startNewGame();
+    if (app.prefs.seats.slice(0, app.prefs.playerCount).some((s) => !s.isAI)) {
+      startNewGame();
+      return;
+    }
+    openModal((box) => {
+      box.append(h('h2', {}, '관전 모드'), h('p', {}, '사람 플레이어가 없습니다. 컴퓨터끼리 대결하는 모습을 볼까요?'),
+        h('div', { class: 'modal-actions' },
+          h('button', { class: 'btn', onclick: closeModal }, '취소'),
+          h('button', { class: 'btn primary', onclick: () => { closeModal(); startNewGame(); } }, '관전하기')));
+    }, { dismissable: true });
   });
   $('#btn-continue').addEventListener('click', continueGame);
   $('#btn-rules').addEventListener('click', () => showRules());
