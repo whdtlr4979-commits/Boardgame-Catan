@@ -104,7 +104,7 @@ img.px, canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
 .btn .cost img { width: 12px; height: 12px; }
 
 /* 시작 화면 */
-#start-screen {
+#start-screen, #lobby-screen {
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
@@ -130,6 +130,35 @@ img.px, canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
 .seat input { font: inherit; flex: 1; min-width: 0; padding: 7px 8px; border: 2px solid var(--line); background: #fff8e4; }
 .seat select { font: inherit; padding: 7px 4px; border: 2px solid var(--line); background: var(--paper2); }
 .start-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
+
+/* 온라인 */
+.online-box { margin-top: 18px; padding-top: 14px; border-top: 3px dashed var(--paper3); display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.online-box h2 { margin: 0; font-size: 18px; text-align: center; }
+.online-note { margin: 0; color: var(--muted); font-size: 13px; text-align: center; line-height: 1.5; }
+#online-controls { display: flex; flex-direction: column; gap: 8px; }
+.field { display: flex; flex-direction: column; gap: 4px; font-weight: 700; }
+.field input, .join-row input, .invite-row input { font: inherit; padding: 8px; border: 2px solid var(--line); background: #fff8e4; min-width: 0; }
+.join-row, .invite-row { display: flex; gap: 6px; align-items: center; }
+.join-row input { flex: 1; text-transform: uppercase; letter-spacing: 4px; font-weight: 700; text-align: center; }
+.join-row .btn { flex: none; }
+.invite-row input { flex: 1; font-size: 12px; }
+.rules-btn { margin-top: 14px; width: calc(100% - 4px); }
+.lobby-title { font-size: 26px; }
+.room-code { font-size: 44px; font-weight: 700; letter-spacing: 10px; margin: 6px 0 10px; color: var(--wood-dark); text-shadow: 3px 3px 0 var(--paper3); }
+.lobby-seats { list-style: none; padding: 0; margin: 12px 0; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.lobby-seats li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #fff8e4; border: 2px solid var(--line); min-height: 44px; }
+.lobby-seats li.empty { background: transparent; border-style: dashed; color: var(--muted); }
+.lobby-seats .swatch { width: 18px; height: 18px; border: 2px solid var(--line); flex: none; }
+.lobby-seats .who { flex: 1; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lobby-seats .tag { font-size: 11px; padding: 1px 5px; background: var(--wood); color: #fff8e4; }
+.lobby-seats .tag.me { background: var(--green); }
+.online-dot { width: 10px; height: 10px; border: 2px solid var(--line); background: #8a8a8a; flex: none; }
+.online-dot.on { background: #5ad25a; }
+.net-status { font-size: 12px; padding: 2px 6px; background: #2a2018; color: #fff8e4; border: 2px solid var(--gold); white-space: nowrap; }
+.net-status.bad { border-color: var(--red); background: #6a1c1c; }
+.badge.off { background: #6a1c1c; }
+.trade-offer { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 6px 0; font-weight: 700; }
+.trade-offer img { width: 20px; height: 20px; }
 
 /* 게임 화면 레이아웃 (모바일 우선) */
 #game-screen {

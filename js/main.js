@@ -8,9 +8,11 @@ import { BoardRenderer, LOGICAL_W, LOGICAL_H } from './render.js';
 import { iconURL, drawSprite, ICONS, SETTLEMENT, CITY, ROBBER, pieceColors } from './sprites.js';
 import { h, $ } from './dom.js';
 import { RULES_HTML } from './rules.js';
+import { serverAvailable, createRoom, joinRoom, OnlineSession } from './net.js';
 
 const SAVE_KEY = 'pixel-catan-save-v1';
 const PREF_KEY = 'pixel-catan-prefs-v1';
+const ONLINE_KEY = 'pixel-catan-online-v1';
 const DEFAULT_NAMES = ['나', '컴퓨터 1', '컴퓨터 2', '컴퓨터 3'];
 
 const app = {
@@ -25,6 +27,16 @@ const app = {
   rolling: false,
   modalOpen: false,
   prevHand: null,
+  dialog: null,
+  // 온라인 상태
+  net: null,
+  room: null,
+  stateKey: null,
+  seen: null,
+  justRolled: false,
+  discardSent: null,
+  sending: false,
+  shownGameOver: false,
   prefs: { speed: 'normal', playerCount: 4, seats: null },
 };
 
@@ -38,7 +50,7 @@ function storage(fn, fallback = null) {
 }
 
 function save() {
-  if (!app.game) return;
+  if (!app.game || app.net) return;
   storage((ls) => ls.setItem(SAVE_KEY, JSON.stringify({ state: app.game.state, viewer: app.viewer })));
 }
 
@@ -96,13 +108,14 @@ function aiDelay(base) {
 }
 
 // ---------- 모달 ----------
-function openModal(build, { dismissable = false } = {}) {
+function openModal(build, { dismissable = false, name = 'misc' } = {}) {
   const modal = $('#modal');
   const box = modal.querySelector('.modal-box');
   box.replaceChildren();
   build(box);
   modal.classList.remove('hidden');
   app.modalOpen = true;
+  app.dialog = name;
   modal.onclick = dismissable ? (e) => e.target === modal && closeModal() : null;
   const first = box.querySelector('button:not(:disabled)');
   if (first && window.matchMedia('(pointer: fine)').matches) first.focus();
@@ -111,6 +124,7 @@ function openModal(build, { dismissable = false } = {}) {
 function closeModal() {
   $('#modal').classList.add('hidden');
   app.modalOpen = false;
+  app.dialog = null;
 }
 
 // ---------- 시작 화면 ----------
@@ -166,11 +180,16 @@ function renderSeats() {
   document.querySelectorAll('#player-count button').forEach((b) => b.classList.toggle('on', Number(b.dataset.n) === app.prefs.playerCount));
 }
 
+function showScreen(id) {
+  for (const el of document.querySelectorAll('.screen')) el.classList.toggle('hidden', el.id !== id);
+}
+
 function showStart() {
   clearTimeout(app.aiTimer);
-  $('#game-screen').classList.add('hidden');
-  $('#start-screen').classList.remove('hidden');
+  closeModal();
+  showScreen('start-screen');
   $('#btn-continue').classList.toggle('hidden', !loadSave());
+  $('#btn-rejoin').classList.toggle('hidden', !loadOnlineSession());
   renderSeats();
   drawLogo();
 }
@@ -198,8 +217,7 @@ function enterGame() {
   app.mode = null;
   app.selected = null;
   app.prevHand = null;
-  $('#start-screen').classList.add('hidden');
-  $('#game-screen').classList.remove('hidden');
+  showScreen('game-screen');
   $('#players').style.setProperty('--np', S().players.length);
   if (humans().length === 1) app.viewer = humans()[0];
   layout();
@@ -213,6 +231,10 @@ function schedule(fn, ms) {
 }
 
 function advance() {
+  if (app.net) {
+    onlineAdvance();
+    return;
+  }
   save();
   const s = S();
   app.mode = null;
@@ -291,7 +313,7 @@ function aiStep() {
 function perform(p, action, animated = false) {
   if (!action) return;
   if (action.type === 'rollDice' && !animated) {
-    if (app.rolling) return;
+    if (app.rolling || app.sending) return;
     app.rolling = true;
     renderDice(true);
     renderActions();
@@ -299,6 +321,10 @@ function perform(p, action, animated = false) {
       app.rolling = false;
       perform(p, action, true);
     }, 550);
+    return;
+  }
+  if (app.net) {
+    sendOnline(action);
     return;
   }
   const s = S();
@@ -341,7 +367,7 @@ function afterAction(p, action) {
 function refresh() {
   if (!app.game) return;
   renderTopbar();
-  renderDice(false);
+  renderDice(app.rolling);
   renderPlayers();
   renderHand();
   renderActions();
@@ -421,7 +447,9 @@ function renderPlayers() {
       h('div', { class: 'badges' },
         s.longestRoad.holder === i ? h('span', { class: 'badge' }, '최장 교역로') : null,
         s.largestArmy.holder === i ? h('span', { class: 'badge army' }, '최강 기사단') : null,
-        pl.isAI ? h('span', { class: 'badge ai' }, 'AI') : null));
+        pl.isAI ? h('span', { class: 'badge ai' }, 'AI') : null,
+        app.net && !pl.isAI && app.room?.seats[i]?.online === false ? h('span', { class: 'badge off' }, '접속 끊김') : null,
+        app.net && i === app.viewer ? h('span', { class: 'badge army' }, '나') : null));
     wrap.append(card);
   });
 }
@@ -483,7 +511,9 @@ function renderActions() {
     return;
   }
   if (!isHumanTurn() || !['roll', 'main'].includes(s.phase) || app.rolling) {
-    if (s.players[s.current].isAI) el.append(h('div', { class: 'wide hand-note', style: { color: '#fff8e4' } }, `${s.players[s.current].name}이(가) 생각 중…`));
+    const cur = s.players[s.current];
+    const msg = app.rolling ? '주사위 굴리는 중…' : cur.isAI ? `${cur.name}이(가) 생각 중…` : app.net && s.current !== app.viewer ? `${cur.name}의 차례를 기다리는 중…` : '';
+    if (msg) el.append(h('div', { class: 'wide hand-note', style: { color: '#fff8e4' } }, msg));
     return;
   }
   const p = s.current;
@@ -672,6 +702,7 @@ function showDiscardDialog(p) {
     const status = h('p', {});
     const ok = h('button', { class: 'btn primary', onclick: () => {
       closeModal();
+      app.discardSent = s.rollId;
       perform(p, { type: 'discard', cards: { ...values } });
     } }, '버리기');
     const total = () => RESOURCES.reduce((a, r) => a + values[r], 0);
@@ -690,7 +721,7 @@ function showDiscardDialog(p) {
       h('p', {}, '7이 나왔고 카드가 8장 이상이라 절반을 버려야 합니다.'), grid, status,
       h('div', { class: 'modal-actions' }, ok));
     update();
-  });
+  }, { name: 'discard' });
 }
 
 function showVictimDialog(hex, victims) {
@@ -839,15 +870,17 @@ function buildBankTrade(box, p, g) {
     ok.textContent = give && get ? `${RESOURCE_NAMES[give]} ${g.tradeRatio(p, give)}장 → ${RESOURCE_NAMES[get]} 1장` : '교환';
   };
   ok.onclick = () => {
-    try {
-      g.act(p, { type: 'bankTrade', give, get });
-      save();
-      refresh();
-      showTradeDialog('bank');
-      toast('교환 완료!', 1000);
-    } catch (err) {
-      toast(err.message);
-    }
+    ok.disabled = true;
+    instantAction({ type: 'bankTrade', give, get })
+      .then(() => {
+        refresh();
+        showTradeDialog('bank');
+        toast('교환 완료!', 1000);
+      })
+      .catch((err) => {
+        toast(err.message);
+        ok.disabled = false;
+      });
   };
   box.append(h('div', { class: 'section-title' }, '줄 자원'), giveGrid, h('div', { class: 'section-title' }, '받을 자원'), getGrid,
     h('div', { class: 'modal-actions' }, h('button', { class: 'btn', onclick: () => { closeModal(); refresh(); } }, '닫기'), ok));
@@ -873,6 +906,12 @@ function buildPlayerTrade(box, p, g) {
   propose.onclick = () => {
     results.replaceChildren();
     const offer = { give: { ...give }, get: { ...get } };
+    if (app.net) {
+      propose.disabled = true;
+      closeModal();
+      app.net.act({ type: 'offerTrade', ...offer }).catch((err) => toast(err.message));
+      return;
+    }
     s.players.forEach((pl, i) => {
       if (i === p) return;
       const hasCards = RESOURCES.every((r) => (offer.get[r] || 0) <= pl.resources[r]);
@@ -925,10 +964,14 @@ function showGameOver() {
       h('button', { class: 'btn', onclick: closeModal }, '보드 보기'),
       h('button', { class: 'btn primary', onclick: () => {
         closeModal();
+        if (app.net) {
+          leaveOnline({ forget: true });
+          return;
+        }
         storage((ls) => ls.removeItem(SAVE_KEY));
         showStart();
       } }, '새 게임')));
-  });
+  }, { name: 'gameOver' });
 }
 
 function showCostTable() {
@@ -964,19 +1007,373 @@ function showMenu() {
         showMenu();
       },
     }, label)));
-    box.append(h('h2', {}, '메뉴'),
-      h('div', { class: 'setting-row' }, h('span', { class: 'label' }, '컴퓨터 속도'), speedSeg),
+    // 온라인: 방장은 접속이 끊긴 사람 자리를 컴퓨터에게 넘길 수 있다
+    const takeovers = [];
+    if (app.net && app.room?.you === 0 && S().phase !== 'gameOver') {
+      app.room.seats.forEach((seat, i) => {
+        if (i === 0 || seat.isAI || seat.online) return;
+        takeovers.push(h('button', { class: 'btn', onclick: () => {
+          app.net.lobby('takeover', { seat: i }).then(() => closeModal()).catch((err) => toast(err.message));
+        } }, `${seat.name} 자리를 컴퓨터로 대체`));
+      });
+    }
+    box.append(h('h2', {}, app.net ? `메뉴 · 방 ${app.room?.code ?? ''}` : '메뉴'),
+      app.net ? null : h('div', { class: 'setting-row' }, h('span', { class: 'label' }, '컴퓨터 속도'), speedSeg),
       h('div', { class: 'start-actions' },
         h('button', { class: 'btn primary', onclick: () => { closeModal(); advance(); } }, '계속하기'),
+        ...takeovers,
         h('button', { class: 'btn', onclick: showCostTable }, '건설 비용'),
         h('button', { class: 'btn', onclick: () => showRules(showMenu) }, '게임 규칙'),
         h('button', { class: 'btn danger', onclick: () => {
           closeModal();
+          if (app.net) {
+            leaveOnline({ forget: false });
+            return;
+          }
           save();
           showStart();
-        } }, '처음 화면으로')));
+        } }, app.net ? '나가기 (나중에 다시 참가 가능)' : '처음 화면으로')));
   });
-  clearTimeout(app.aiTimer);
+  if (!app.net) clearTimeout(app.aiTimer);
+}
+
+// ---------- 온라인 ----------
+function loadOnlineSession() {
+  const raw = storage((ls) => ls.getItem(ONLINE_KEY));
+  try {
+    const data = raw ? JSON.parse(raw) : null;
+    return data?.code && data?.token ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveOnlineSession(data) {
+  storage((ls) => ls.setItem(ONLINE_KEY, JSON.stringify(data)));
+}
+
+function forgetOnlineSession() {
+  storage((ls) => ls.removeItem(ONLINE_KEY));
+}
+
+// 즉시 처리되는 행동 (은행 교역): 로컬은 바로 적용, 온라인은 서버 응답을 기다린다
+function instantAction(action) {
+  if (app.net) return app.net.act(action);
+  return new Promise((resolve) => {
+    G().act(S().current, action);
+    save();
+    resolve();
+  });
+}
+
+function sendOnline(action) {
+  if (app.sending) return;
+  app.sending = true;
+  if (action.type === 'rollDice') app.justRolled = true;
+  app.net.act(action)
+    .catch((err) => {
+      app.justRolled = false;
+      app.discardSent = null;
+      toast(err.message);
+      onlineAdvance();
+    })
+    .finally(() => {
+      app.sending = false;
+    });
+}
+
+function setNetStatus(status, message) {
+  const el = $('#net-status');
+  if (status === 'gone') {
+    leaveOnline({ forget: true, message: message || '방에 연결할 수 없습니다.' });
+    return;
+  }
+  el.classList.toggle('hidden', status === 'online');
+  el.classList.toggle('bad', status !== 'online');
+  el.textContent = status === 'online' ? '' : '재연결 중…';
+  const lobbyStatus = $('#lobby-status');
+  if (status !== 'online' && !$('#lobby-screen').classList.contains('hidden')) lobbyStatus.textContent = '서버와 다시 연결하는 중…';
+}
+
+function connectOnline(code, token, name) {
+  if (app.net) app.net.close();
+  saveOnlineSession({ code, token, name });
+  app.room = null;
+  app.game = null;
+  app.seen = null;
+  app.stateKey = null;
+  app.shownGameOver = false;
+  app.net = new OnlineSession(code, token, { onView, onStatus: setNetStatus });
+  app.net.connect();
+}
+
+function leaveOnline({ forget = false, message } = {}) {
+  if (app.net) app.net.close();
+  app.net = null;
+  app.room = null;
+  app.game = null;
+  if (forget) forgetOnlineSession();
+  $('#net-status').classList.add('hidden');
+  showStart();
+  if (message) toast(message, 2600);
+}
+
+function onView(view) {
+  if (view.removed || view.closed) {
+    leaveOnline({ forget: true, message: view.closed ? '방장이 방을 닫았습니다.' : '방에서 나왔습니다.' });
+    return;
+  }
+  app.room = view;
+  if (!view.started) {
+    renderLobby();
+    return;
+  }
+  const prev = app.game?.state ?? null;
+  app.game = new Game(view.state);
+  app.viewer = view.you;
+  if ($('#game-screen').classList.contains('hidden')) {
+    closeModal();
+    enterGame();
+    onlineEvents(null, view.state);
+    return;
+  }
+  onlineEvents(prev, view.state);
+  onlineAdvance();
+}
+
+// 새 상태에서 주사위·강탈·카드 구매 알림을 찾는다
+function onlineEvents(prev, s) {
+  const me = app.viewer;
+  if (!app.seen) {
+    app.seen = { roll: s.rollId, steal: s.lastSteal?.id, dev: s.lastDevBought?.id };
+    return;
+  }
+  if (prev) app.prevHand = { ...prev.players[me].resources };
+  if (s.rollId !== app.seen.roll) {
+    app.seen.roll = s.rollId;
+    const seven = s.dice && s.dice[0] + s.dice[1] === 7;
+    if (app.justRolled) {
+      app.justRolled = false;
+      if (seven) toast('7! 도둑이 나타났습니다!');
+    } else {
+      app.rolling = true;
+      renderDice(true);
+      setTimeout(() => {
+        app.rolling = false;
+        refresh();
+        if (seven) toast('7! 도둑이 나타났습니다!');
+      }, 500);
+    }
+  }
+  if (s.lastSteal && s.lastSteal.id !== app.seen.steal) {
+    app.seen.steal = s.lastSteal.id;
+    const { thief, victim, resource } = s.lastSteal;
+    if (resource && thief === me) toast(`${s.players[victim].name}에게서 ${RESOURCE_NAMES[resource]}을(를) 빼앗았습니다!`);
+    else if (resource && victim === me) toast(`${s.players[thief].name}이(가) ${RESOURCE_NAMES[resource]}을(를) 빼앗아 갔습니다!`);
+  }
+  if (s.lastDevBought && s.lastDevBought.id !== app.seen.dev) {
+    app.seen.dev = s.lastDevBought.id;
+    if (s.lastDevBought.player === me && s.lastDevBought.type) toast(`발전 카드: [${DEV_NAMES[s.lastDevBought.type]}]`);
+  }
+}
+
+function onlineAdvance() {
+  if (!app.game) return;
+  const s = S();
+  const me = app.viewer;
+  const key = [s.phase, s.current, s.turn, s.setup.index, s.setup.step, s.freeRoads].join('|');
+  if (key !== app.stateKey) {
+    app.stateKey = key;
+    app.selected = null;
+    if (isHumanTurn()) setHumanMode();
+    else app.mode = null;
+  }
+  if (!isHumanTurn()) app.mode = null;
+
+  if (s.phase === 'gameOver') {
+    refresh();
+    if (!app.shownGameOver) {
+      app.shownGameOver = true;
+      showGameOver();
+    }
+    return;
+  }
+
+  // 7: 각자 동시에 버린다
+  if (s.pendingDiscards[me] && app.discardSent !== s.rollId) {
+    if (app.dialog !== 'discard') showDiscardDialog(me);
+  } else if (app.dialog === 'discard') {
+    closeModal();
+  }
+
+  // 교역 제안
+  const t = app.room.trade;
+  const mine = t && t.from === me;
+  const askMe = t && t.responses[me] === 'pending';
+  if (t && (mine || askMe || app.dialog === 'tradeStatus')) {
+    if (app.dialog === 'tradeStatus' || !app.modalOpen) showTradeStatus(t);
+  } else if (app.dialog === 'tradeStatus') {
+    closeModal();
+  }
+  refresh();
+}
+
+function cardList(cards) {
+  const wrap = h('span', { class: 'trade-offer' });
+  for (const r of RESOURCES) for (let i = 0; i < (cards[r] || 0); i++) wrap.append(resIcon(r, 20));
+  return wrap;
+}
+
+function showTradeStatus(t) {
+  const s = S();
+  const me = app.viewer;
+  const from = s.players[t.from];
+  openModal((box) => {
+    if (t.from === me) {
+      box.append(h('h2', {}, '교역 제안 중'),
+        h('div', { class: 'trade-offer' }, '내가 주는 카드', cardList(t.give)),
+        h('div', { class: 'trade-offer' }, '내가 받는 카드', cardList(t.get)));
+      const list = h('div', { class: 'response-list' });
+      for (const [i, r] of Object.entries(t.responses)) {
+        const row = h('div', { class: 'response' }, h('span', { class: 'who' }, s.players[i].name));
+        if (r === 'accept') {
+          row.append(h('span', { class: 'ok' }, '수락'), h('button', { class: 'btn small primary', onclick: () => {
+            app.net.act({ type: 'confirmTrade', partner: Number(i) }).then(() => toast(`${s.players[i].name}와(과) 교역 완료!`)).catch((err) => toast(err.message));
+          } }, '교역하기'));
+        } else if (r === 'pending') row.append(h('span', {}, '응답 기다리는 중…'));
+        else row.append(h('span', { class: 'no' }, r === 'cannot' ? '카드 부족' : '거절'));
+        list.append(row);
+      }
+      box.append(list, h('div', { class: 'modal-actions' }, h('button', { class: 'btn danger', onclick: () => {
+        app.net.act({ type: 'cancelTrade' }).catch((err) => toast(err.message));
+      } }, '제안 취소')));
+    } else {
+      const r = t.responses[me];
+      box.append(h('h2', {}, `${from.name}의 교역 제안`),
+        h('div', { class: 'trade-offer' }, '내가 받는 카드', cardList(t.give)),
+        h('div', { class: 'trade-offer' }, '내가 주는 카드', cardList(t.get)));
+      if (r === 'pending') {
+        box.append(h('div', { class: 'modal-actions' },
+          h('button', { class: 'btn', onclick: () => app.net.act({ type: 'respondTrade', accept: false }).catch((err) => toast(err.message)) }, '거절'),
+          h('button', { class: 'btn primary', onclick: () => app.net.act({ type: 'respondTrade', accept: true }).catch((err) => toast(err.message)) }, '수락')));
+      } else {
+        box.append(h('p', {}, r === 'accept' ? `수락했습니다. ${from.name}의 결정을 기다리는 중…` : r === 'cannot' ? '카드가 부족해 수락할 수 없습니다.' : '거절했습니다.'),
+          h('div', { class: 'modal-actions' }, h('button', { class: 'btn', onclick: closeModal }, '닫기')));
+      }
+    }
+  }, { name: 'tradeStatus' });
+}
+
+function inviteLink(code) {
+  return `${location.origin}${location.pathname}?room=${code}`;
+}
+
+function renderLobby() {
+  const room = app.room;
+  showScreen('lobby-screen');
+  closeModal();
+  const host = room.you === 0;
+  $('#lobby-code').textContent = room.code;
+  $('#invite-link').value = inviteLink(room.code);
+  const list = $('#lobby-seats');
+  list.replaceChildren();
+  for (let i = 0; i < 4; i++) {
+    const seat = room.seats[i];
+    if (!seat) {
+      list.append(h('li', { class: 'empty' }, h('span', { class: 'swatch', style: { background: 'transparent', borderStyle: 'dashed' } }), h('span', { class: 'who' }, '빈 자리')));
+      continue;
+    }
+    list.append(h('li', {},
+      h('span', { class: 'swatch', style: { background: PLAYER_COLORS[i].main } }),
+      h('span', { class: `online-dot${seat.online ? ' on' : ''}`, title: seat.online ? '접속 중' : '접속 끊김' }),
+      h('span', { class: 'who' }, seat.name),
+      i === 0 ? h('span', { class: 'tag' }, '방장') : null,
+      i === room.you ? h('span', { class: 'tag me' }, '나') : null,
+      seat.isAI ? h('span', { class: 'tag' }, '컴퓨터') : null,
+      host && i > 0 ? h('button', { class: 'btn small', onclick: () => app.net.lobby('remove', { seat: i }).catch((err) => toast(err.message)) }, '내보내기') : null));
+  }
+  const n = room.seats.length;
+  $('#btn-add-ai').classList.toggle('hidden', !host || n >= 4);
+  $('#btn-start-online').classList.toggle('hidden', !host);
+  $('#btn-start-online').disabled = n < 3;
+  $('#lobby-status').textContent = host
+    ? n < 3 ? '3명 이상이 모이면 시작할 수 있습니다. 빈자리는 컴퓨터로 채울 수 있어요.' : '준비되면 게임을 시작하세요!'
+    : '방장이 게임을 시작하기를 기다리는 중…';
+}
+
+async function setupOnlineStart() {
+  const note = $('#online-note');
+  const controls = $('#online-controls');
+  const nameInput = $('#online-name');
+  const codeInput = $('#room-code');
+  nameInput.value = loadOnlineSession()?.name || app.prefs.onlineName || '';
+  const params = new URLSearchParams(location.search);
+  const invited = (params.get('room') || '').toUpperCase().slice(0, 4);
+  if (invited) codeInput.value = invited;
+
+  const ok = await serverAvailable();
+  if (!ok) {
+    note.textContent = '온라인 대전은 게임 서버 주소로 접속했을 때 사용할 수 있습니다. (README의 서버 실행 방법 참고)';
+    return;
+  }
+  note.textContent = invited ? `초대받은 방: ${invited} · 이름을 입력하고 참가하세요.` : '방을 만들고 친구에게 코드를 알려 주세요.';
+  controls.classList.remove('hidden');
+
+  const getName = () => {
+    const name = nameInput.value.trim();
+    if (!name) {
+      toast('이름을 입력해 주세요.');
+      nameInput.focus();
+      return null;
+    }
+    app.prefs.onlineName = name;
+    savePrefs();
+    return name;
+  };
+  const busy = (fn) => async () => {
+    const buttons = controls.querySelectorAll('button');
+    buttons.forEach((b) => (b.disabled = true));
+    try {
+      await fn();
+    } catch (err) {
+      toast(err.message, 2600);
+    } finally {
+      buttons.forEach((b) => (b.disabled = false));
+    }
+  };
+  $('#btn-create-room').addEventListener('click', busy(async () => {
+    const name = getName();
+    if (!name) return;
+    const { code, token } = await createRoom(name);
+    connectOnline(code, token, name);
+  }));
+  $('#btn-join-room').addEventListener('click', busy(async () => {
+    const name = getName();
+    const code = codeInput.value.trim().toUpperCase();
+    if (!name) return;
+    if (!/^[A-Z]{4}$/.test(code)) {
+      toast('방 코드 4글자를 입력해 주세요.');
+      codeInput.focus();
+      return;
+    }
+    const saved = loadOnlineSession();
+    if (saved?.code === code) {
+      connectOnline(code, saved.token, saved.name);
+      return;
+    }
+    const { token } = await joinRoom(code, name);
+    connectOnline(code, token, name);
+  }));
+  codeInput.addEventListener('keydown', (e) => e.key === 'Enter' && $('#btn-join-room').click());
+  $('#btn-rejoin').addEventListener('click', () => {
+    const saved = loadOnlineSession();
+    if (saved) connectOnline(saved.code, saved.token, saved.name);
+  });
+
+  // 초대 링크로 들어왔고 같은 방에 참가한 적이 있으면 바로 복귀
+  const saved = loadOnlineSession();
+  if (saved && (!invited || saved.code === invited)) connectOnline(saved.code, saved.token, saved.name);
+  else if (invited) nameInput.focus();
 }
 
 // ---------- 레이아웃 ----------
@@ -1023,6 +1420,27 @@ function init() {
   $('#btn-continue').addEventListener('click', continueGame);
   $('#btn-rules').addEventListener('click', () => showRules());
   $('#btn-menu').addEventListener('click', showMenu);
+  $('#btn-add-ai').addEventListener('click', () => app.net?.lobby('addAI').catch((err) => toast(err.message)));
+  $('#btn-start-online').addEventListener('click', () => app.net?.lobby('start').catch((err) => toast(err.message)));
+  $('#btn-leave-room').addEventListener('click', () => {
+    const net = app.net;
+    if (!net) return showStart();
+    net.lobby('leave').catch(() => {}).finally(() => leaveOnline({ forget: true }));
+  });
+  $('#btn-copy-link').addEventListener('click', () => {
+    const input = $('#invite-link');
+    const done = () => toast('초대 링크를 복사했습니다.');
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(input.value).then(done).catch(() => {
+        input.select();
+        toast('링크를 길게 눌러 복사하세요.');
+      });
+    } else {
+      input.select();
+      document.execCommand?.('copy');
+      done();
+    }
+  });
 
   const board = $('#board');
   board.addEventListener('pointerup', onBoardPointer);
@@ -1055,6 +1473,7 @@ function init() {
   }, 480);
 
   showStart();
+  setupOnlineStart();
 }
 
 init();

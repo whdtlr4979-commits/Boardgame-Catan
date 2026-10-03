@@ -8,7 +8,8 @@ import { TOPO, generateBoard, shuffle } from './board.js';
 export class RuleError extends Error {}
 
 const emptyHand = () => Object.fromEntries(RESOURCES.map((r) => [r, 0]));
-const total = (hand) => RESOURCES.reduce((s, r) => s + (hand[r] || 0), 0);
+// 온라인 화면에서는 상대 손패가 { hidden: 장수 } 형태로 가려져 온다
+const total = (hand) => (hand.hidden !== undefined ? hand.hidden : RESOURCES.reduce((s, r) => s + (hand[r] || 0), 0));
 const fmtCards = (cards) =>
   RESOURCES.filter((r) => cards[r] > 0).map((r) => `${RESOURCE_NAMES[r]} ${cards[r]}`).join(', ');
 
@@ -84,6 +85,11 @@ export class Game {
 
   player(i) {
     return this.state.players[i];
+  }
+
+  nextEventId() {
+    this.state.eventId = (this.state.eventId || 0) + 1;
+    return this.state.eventId;
   }
 
   log(text, player = null) {
@@ -360,6 +366,7 @@ export class Game {
     this.requirePhase('roll');
     const d = forced ?? [1 + Math.floor(this.rng() * 6), 1 + Math.floor(this.rng() * 6)];
     s.dice = d;
+    s.rollId = this.nextEventId();
     const sum = d[0] + d[1];
     this.log(`${s.players[p].name}: 주사위 ${d[0]} + ${d[1]} = ${sum}`, p);
     if (sum === 7) {
@@ -452,7 +459,7 @@ export class Game {
       const r = bag[Math.floor(this.rng() * bag.length)];
       vr[r]--;
       s.players[p].resources[r]++;
-      s.lastSteal = { thief: p, victim, resource: r };
+      s.lastSteal = { thief: p, victim, resource: r, id: this.nextEventId() };
       this.log(`${s.players[p].name}: ${s.players[victim].name}에게서 카드 1장을 빼앗음`, p);
     }
     s.phase = s.returnPhase || 'main';
@@ -520,7 +527,7 @@ export class Game {
     this.pay(p, COSTS.devCard);
     const type = s.devDeck.pop();
     s.players[p].devCards.push({ type, turn: s.turn });
-    s.lastDevBought = { player: p, type };
+    s.lastDevBought = { player: p, type, id: this.nextEventId() };
     this.log(`${s.players[p].name}: 발전 카드 구매`, p);
   }
 
