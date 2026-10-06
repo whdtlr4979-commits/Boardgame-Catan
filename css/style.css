@@ -319,14 +319,25 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
   .pcard { font-size: 13px; }
 }
 
-/* 가로로 긴 모바일 */
+/* 가로로 긴 모바일: 보드가 왼쪽 열 높이를 전부 쓰고, 상단 바·플레이어·손패는 오른쪽 열에 */
 @media (max-width: 959px) and (orientation: landscape) and (max-height: 520px) {
   #game-screen {
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 40%);
-    grid-template-areas: 'top side' 'players side' 'board side';
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 42%);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas: 'board top' 'board players' 'board side';
     height: 100vh;
+    height: 100dvh;
+    gap: 6px 10px;
+    padding: 6px max(10px, env(safe-area-inset-right)) 6px max(10px, env(safe-area-inset-left));
   }
+  #players { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pcard { padding: 5px 8px 6px; border-top-width: 4px; }
+  .pcard .badges { display: none; }
   #side { overflow-y: auto; }
+  /* 자주 누르는 버튼을 손패보다 위에 */
+  #actions { order: -1; }
+  #board-wrap { padding: 0; }
+  #prompt { margin-top: 4px; font-size: 14px; }
 }
 
 @media (max-width: 420px) {
