@@ -1359,16 +1359,23 @@ async function setupOnlineStart() {
 }
 
 // ---------- 레이아웃 ----------
+// 보드 바깥 여백: 캔버스 margin(10px) + 나무 테두리(9px)
+const BOARD_FRAME = 19;
+
 function layout() {
   if (!app.renderer || $('#game-screen').classList.contains('hidden')) return;
   const wrap = $('#board-wrap');
   const desktop = window.matchMedia('(min-width: 960px)').matches;
   const landscapePhone = window.matchMedia('(max-width: 959px) and (orientation: landscape) and (max-height: 520px)').matches;
-  const availW = wrap.clientWidth;
+  const availW = wrap.clientWidth - BOARD_FRAME * 2;
   let availH;
   if (desktop || landscapePhone) {
-    const top = wrap.getBoundingClientRect().top;
-    availH = window.innerHeight - top - 48;
+    // 격자가 정해 준 보드 영역의 실제 높이에서 안내 문구와 테두리를 뺀다
+    const style = getComputedStyle(wrap);
+    const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const prompt = $('#prompt');
+    const promptH = prompt.offsetHeight + parseFloat(getComputedStyle(prompt).marginTop);
+    availH = wrap.clientHeight - padding - promptH - BOARD_FRAME * 2;
   } else {
     availH = Math.max(window.innerHeight * 0.62, 260);
   }
@@ -1433,6 +1440,21 @@ function init() {
   });
 
   window.addEventListener('resize', layout);
+  // 플레이어 카드나 보드 영역의 크기가 바뀌면(글꼴 로딩, 이름 길이 등) 보드 크기를 다시 맞춘다
+  if (window.ResizeObserver) {
+    let pending = false;
+    const ro = new ResizeObserver(() => {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => {
+        pending = false;
+        layout();
+      });
+    });
+    ro.observe($('#players'));
+    ro.observe($('#board-wrap'));
+  }
+  document.fonts?.ready.then(layout);
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && app.modalOpen && $('#modal').onclick) closeModal();
     else if (e.key === 'Escape' && app.mode && S().phase === 'main') {

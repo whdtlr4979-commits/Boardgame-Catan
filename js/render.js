@@ -458,6 +458,11 @@ export class BoardRenderer {
     const scale = Math.max(0.5, Math.min(availW / LOGICAL_W, availH / LOGICAL_H));
     const cssW = Math.round(LOGICAL_W * scale);
     const cssH = Math.round(LOGICAL_H * scale);
+    // 크기가 그대로면 다시 만들지 않는다 (ResizeObserver 반복 방지)
+    if (this.cssW === cssW && this.cssH === cssH && this.dpr === dpr) return;
+    this.cssW = cssW;
+    this.cssH = cssH;
+    this.dpr = dpr;
     this.canvas.style.width = `${cssW}px`;
     this.canvas.style.height = `${cssH}px`;
     this.canvas.width = Math.round(cssW * dpr);
