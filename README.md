@@ -5,9 +5,10 @@ PC와 모바일 브라우저에서 즐기는 **도트 아트 스타일 카탄** 
 
 ## 실행 방법
 
-Node.js 18 이상이 필요합니다. 외부 패키지는 쓰지 않습니다.
+Node.js 18 이상이 필요합니다.
 
 ```bash
+npm install          # Postgres 연결용 pg 패키지 설치
 npm start            # 게임 서버 실행 → http://localhost:8080
 ```
 
@@ -28,7 +29,28 @@ npm start            # 게임 서버 실행 → http://localhost:8080
 - 플레이어 교역은 제안 → 상대가 수락/거절 → 제안자가 수락한 사람 중 한 명과 교역합니다.
 - 새로고침하거나 연결이 끊겨도 같은 기기에서 다시 열면 자동으로 이어서 합니다.
 - 오래 접속이 끊긴 사람이 있으면 방장이 메뉴에서 그 자리를 컴퓨터로 대체할 수 있습니다.
-- 방은 서버 메모리에 있어서 서버를 재시작하면 사라집니다.
+- 방 상태를 데이터베이스에 저장하면 서버가 재시작되거나 잠들었다 깨어나도 게임이 이어집니다 (아래 참고).
+
+### 방 상태 저장
+
+서버는 방이 바뀔 때마다 상태(보드, 손패, 차례, 참가자)를 저장소에 저장합니다.
+서버가 다시 켜지면 누군가 그 방에 접속할 때 저장소에서 불러오고, 접속해 있던 사람들은 자동으로 다시 연결됩니다.
+저장소는 환경 변수로 고릅니다.
+
+| 환경 변수 | 저장 위치 | 언제 쓰나요 |
+| --- | --- | --- |
+| `DATABASE_URL` | Postgres 데이터베이스 | Render 같은 클라우드 (디스크가 유지되지 않는 곳) |
+| `ROOMS_DIR` | 폴더 안의 JSON 파일 | 내 PC나 디스크가 유지되는 서버 |
+| (없음) | 메모리 | 테스트용. 서버를 재시작하면 방이 사라집니다 |
+
+- 테이블(`catan_rooms`)은 서버가 처음 켜질 때 자동으로 만듭니다.
+- 7일 동안 바뀌지 않은 방은 자동으로 지웁니다.
+- 자체 서명 인증서를 쓰는 데이터베이스라면 `DATABASE_SSL=no-verify`를 함께 설정하세요.
+
+```bash
+ROOMS_DIR=./rooms npm start                                    # 파일로 저장
+DATABASE_URL=postgres://user:pass@host:5432/db npm start       # Postgres로 저장
+```
 
 ### 인터넷에 공개하기 (예: Render 무료 플랜)
 
@@ -36,7 +58,14 @@ npm start            # 게임 서버 실행 → http://localhost:8080
    (`render.yaml`이 있어 설정이 자동으로 채워집니다.)
 2. 배포가 끝나면 나오는 `https://...onrender.com` 주소로 접속해 친구들과 플레이합니다.
 
-무료 플랜은 15분 동안 접속이 없으면 서버가 잠들고, 이때 진행 중이던 방도 사라집니다.
+무료 플랜은 15분 동안 접속이 없으면 서버가 잠들고, 잠들거나 재배포할 때 디스크 내용도 사라집니다.
+그래서 **Render에서는 Postgres 데이터베이스를 연결해야** 방이 유지됩니다.
+
+1. [Neon](https://neon.tech)이나 [Supabase](https://supabase.com)에서 무료 Postgres 데이터베이스를 만들고 연결 주소(`postgres://...`)를 복사합니다.
+   (Render의 무료 Postgres는 30일 뒤 만료되므로 이 둘을 권장합니다.)
+2. Render 서비스의 **Environment**에 `DATABASE_URL`로 그 주소를 넣습니다.
+3. 서버 로그에 `방 저장소: postgres`가 보이면 연결된 것입니다. `/api/health`의 `storage` 값으로도 확인할 수 있습니다.
+
 Railway, Fly.io 등 Node.js를 실행할 수 있는 곳이면 어디든 `npm start`로 동작합니다 (`PORT` 환경 변수 사용).
 
 GitHub Pages에서 화면을 열고 서버는 따로 두고 싶다면 `js/config.js`의 `SERVER_URL`에 서버 주소를 적으세요.
@@ -81,14 +110,19 @@ GitHub Pages에서 화면을 열고 서버는 따로 두고 싶다면 `js/config
 | `js/main.js` | 화면 흐름, 대화상자, 저장, 온라인 화면 |
 | `js/net.js` | 온라인 서버 통신 (fetch + Server-Sent Events) |
 | `server/server.js` | 정적 파일 + 방 API 서버 |
-| `server/rooms.js` | 방·대기실, 서버 판정, 교역 제안, 비밀 정보 가리기 |
-| `tests/` | 엔진·AI 테스트, 서버(방 흐름·권한·비밀 정보·HTTP/SSE) 테스트 |
+| `server/rooms.js` | 방·대기실, 서버 판정, 교역 제안, 비밀 정보 가리기, 방 저장/복원 |
+| `server/store.js` | 방 저장소 (Postgres / 파일) |
+| `tests/` | 엔진·AI 테스트, 서버(방 흐름·권한·비밀 정보·HTTP/SSE) 테스트, 저장/복원 테스트 |
 
 ## 테스트
 
 ```bash
 npm test
+# Postgres 저장소 테스트까지 돌리려면 빈 테스트 데이터베이스 주소를 지정합니다
+TEST_DATABASE_URL=postgres://postgres@localhost:5432/catan_test npm test
 ```
+
+GitHub Actions(`.github/workflows/ci.yml`)는 PR마다 Postgres를 띄워 전체 테스트를 실행합니다.
 
 ## GitHub Pages 배포
 

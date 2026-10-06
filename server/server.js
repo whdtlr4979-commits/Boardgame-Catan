@@ -1,10 +1,11 @@
-// 픽셀 카탄 서버: 정적 파일 + 온라인 방 API (외부 의존성 없음)
+// 픽셀 카탄 서버: 정적 파일 + 온라인 방 API + 방 상태 저장
 //   node server/server.js   (PORT 환경 변수, 기본 8080)
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RoomManager, RoomError } from './rooms.js';
+import { createStore } from './store.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const STATIC_PREFIXES = ['css/', 'js/', 'assets/'];
@@ -104,7 +105,9 @@ export function createServer({ manager = new RoomManager(), log = console } = {}
     res.end('Not found');
   });
 
-  const sweeper = setInterval(() => manager.sweep(), 10 * 60 * 1000);
+  const sweeper = setInterval(() => {
+    manager.sweep().catch((err) => log.error('[sweep]', err.message));
+  }, 10 * 60 * 1000);
   sweeper.unref();
   server.on('close', () => clearInterval(sweeper));
   return server;
@@ -112,16 +115,18 @@ export function createServer({ manager = new RoomManager(), log = console } = {}
 
 async function handleApi(req, res, url, manager) {
   const parts = url.pathname.split('/').filter(Boolean); // ['api', 'rooms', code, action]
-  if (parts[1] === 'health') return sendJSON(res, 200, { ok: true, rooms: manager.rooms.size });
+  if (parts[1] === 'health') {
+    return sendJSON(res, 200, { ok: true, rooms: manager.rooms.size, storage: manager.store?.kind ?? 'memory' });
+  }
   if (parts[1] !== 'rooms') throw new RoomError('찾을 수 없는 주소입니다.', 404);
 
   if (parts.length === 2 && req.method === 'POST') {
     const body = await readBody(req);
-    const { room, token, seat } = manager.create(body.name);
+    const { room, token, seat } = await manager.create(body.name);
     return sendJSON(res, 200, { code: room.code, token, seat });
   }
 
-  const room = manager.get(parts[2]);
+  const room = await manager.get(parts[2]);
   const op = parts[3];
 
   if (op === 'events' && req.method === 'GET') {
@@ -168,7 +173,41 @@ async function handleApi(req, res, url, manager) {
   throw new RoomError('찾을 수 없는 주소입니다.', 404);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+async function main() {
+  const store = createStore(process.env);
+  if (store) {
+    await store.init();
+    console.log(`방 저장소: ${store.kind}`);
+  } else {
+    console.log('방 저장소: 메모리 (서버를 재시작하면 방이 사라집니다. DATABASE_URL 또는 ROOMS_DIR을 설정하세요)');
+  }
+  const manager = new RoomManager({ store });
+  const server = createServer({ manager });
   const port = Number(process.env.PORT) || 8080;
-  createServer().listen(port, () => console.log(`픽셀 카탄 서버: http://localhost:${port}`));
+  server.listen(port, () => console.log(`픽셀 카탄 서버: http://localhost:${port}`));
+
+  // 종료 신호를 받으면 저장하지 못한 방을 마저 저장한다 (Render는 잠들거나 재배포할 때 SIGTERM을 보낸다)
+  let stopping = false;
+  const shutdown = async (signal) => {
+    if (stopping) return;
+    stopping = true;
+    console.log(`${signal}: 방을 저장하고 종료합니다…`);
+    server.close();
+    server.closeAllConnections?.();
+    try {
+      await manager.flushAll();
+      await store?.close();
+    } finally {
+      process.exit(0);
+    }
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error('서버를 시작하지 못했습니다:', err.message);
+    process.exit(1);
+  });
 }

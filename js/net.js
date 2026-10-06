@@ -43,6 +43,7 @@ export class OnlineSession {
     this.onView = onView;
     this.onStatus = onStatus;
     this.version = -1;
+    this.epoch = null;
     this.es = null;
   }
 
@@ -72,6 +73,11 @@ export class OnlineSession {
   }
 
   accept(view) {
+    // 서버가 다시 켜져 방을 저장소에서 불러오면 epoch가 바뀐다
+    if (view.epoch !== undefined && view.epoch !== this.epoch) {
+      this.epoch = view.epoch;
+      this.version = -1;
+    }
     if (view.version !== undefined && view.version < this.version) return;
     if (view.version !== undefined) this.version = view.version;
     this.onView(view);

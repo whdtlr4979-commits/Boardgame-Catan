@@ -15,6 +15,8 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const MIN_PLAYERS = 3;
 const MAX_PLAYERS = 4;
 const AI_NAMES = ['컴퓨터 A', '컴퓨터 B', '컴퓨터 C', '컴퓨터 D'];
+const CODE_RE = /^[A-Z]{4}$/;
+const SAVE_FORMAT = 1;
 
 // 클라이언트가 직접 보낼 수 있는 엔진 행동
 const CLIENT_ACTIONS = new Set([
@@ -50,6 +52,35 @@ export class Room {
     this.rng = rng;
     this.aiTimer = null;
     this.touched = Date.now();
+    // 서버가 다시 켜지면 바뀌는 값. 클라이언트는 이 값이 바뀌면 버전 비교를 새로 시작한다.
+    this.epoch = crypto.randomBytes(4).toString('hex');
+    this.onPersist = null;
+  }
+
+  // ---------- 저장/복원 ----------
+  toJSON() {
+    return {
+      format: SAVE_FORMAT,
+      code: this.code,
+      seats: this.seats.map(({ name, isAI, token }) => ({ name, isAI, token })),
+      state: this.game ? this.game.state : null,
+      trade: this.trade,
+      version: this.version,
+      closed: !!this.closed,
+      touched: this.touched,
+    };
+  }
+
+  static fromJSON(data, opts = {}) {
+    if (data?.format !== SAVE_FORMAT) throw new Error('알 수 없는 저장 형식입니다.');
+    const room = new Room(data.code, opts);
+    room.seats = data.seats.map((s) => ({ name: s.name, isAI: s.isAI, token: s.token, connections: 0 }));
+    room.game = data.state ? new Game(data.state, room.rng) : null;
+    room.trade = data.trade ?? null;
+    room.version = data.version ?? 0;
+    room.closed = !!data.closed;
+    room.touched = data.touched ?? Date.now();
+    return room;
   }
 
   get started() {
@@ -268,9 +299,10 @@ export class Room {
   }
 
   // ---------- 동기화 ----------
-  changed() {
+  changed({ persist = true } = {}) {
     this.version++;
     this.touched = Date.now();
+    if (persist) this.onPersist?.(this);
     for (const l of this.listeners) {
       const seat = this.seats.findIndex((s) => s.token === l.token);
       l.send(seat < 0 ? { code: this.code, version: this.version, removed: true, closed: !!this.closed } : this.view(seat));
@@ -283,12 +315,12 @@ export class Room {
     const listener = { token, send };
     this.listeners.add(listener);
     this.seats.find((s) => s.token === token).connections++;
-    this.changed();
+    this.changed({ persist: false });
     return () => {
       this.listeners.delete(listener);
       const seat = this.seats.find((s) => s.token === token);
       if (seat) seat.connections--;
-      this.changed();
+      this.changed({ persist: false });
     };
   }
 
@@ -296,6 +328,7 @@ export class Room {
     const meta = {
       code: this.code,
       version: this.version,
+      epoch: this.epoch,
       you: seat,
       host: 0,
       closed: !!this.closed,
@@ -336,37 +369,105 @@ function sanitizeAction(a) {
 }
 
 export class RoomManager {
-  constructor(opts = {}) {
+  // store: server/store.js의 저장소 (없으면 메모리에만 보관)
+  constructor({ store = null, saveDelay = 250, ...roomOpts } = {}) {
     this.rooms = new Map();
-    this.opts = opts;
+    this.loading = new Map();
+    this.store = store;
+    this.saveDelay = saveDelay;
+    this.opts = roomOpts;
   }
 
-  create(name) {
+  attach(room) {
+    room.onPersist = (r) => this.markDirty(r);
+    this.rooms.set(room.code, room);
+    return room;
+  }
+
+  async create(name) {
     let code;
-    do {
+    for (;;) {
       code = Array.from({ length: 4 }, () => CODE_CHARS[crypto.randomInt(CODE_CHARS.length)]).join('');
-    } while (this.rooms.has(code));
-    const room = new Room(code, this.opts);
-    this.rooms.set(code, room);
+      if (this.rooms.has(code)) continue;
+      if (this.store && (await this.store.load(code))) continue;
+      break;
+    }
+    const room = this.attach(new Room(code, this.opts));
     const { token, seat } = room.join(name);
     return { room, token, seat };
   }
 
-  get(code) {
-    const room = this.rooms.get(String(code || '').toUpperCase());
-    if (!room || room.closed) throw new RoomError('방을 찾을 수 없습니다. 코드를 확인해 주세요.', 404);
+  async get(code) {
+    const c = String(code || '').toUpperCase();
+    const notFound = () => new RoomError('방을 찾을 수 없습니다. 코드를 확인해 주세요.', 404);
+    if (!CODE_RE.test(c)) throw notFound();
+    let room = this.rooms.get(c);
+    if (!room && this.store) {
+      // 같은 방을 동시에 두 번 불러오지 않도록 진행 중인 로딩을 공유한다
+      if (!this.loading.has(c)) {
+        this.loading.set(c, this.load(c).finally(() => this.loading.delete(c)));
+      }
+      room = await this.loading.get(c);
+    }
+    if (!room || room.closed) throw notFound();
     return room;
   }
 
+  async load(code) {
+    const data = await this.store.load(code);
+    if (!data || data.closed) return null;
+    const room = this.attach(Room.fromJSON(data, this.opts));
+    room.scheduleAI();
+    return room;
+  }
+
+  // ---------- 저장 ----------
+  markDirty(room) {
+    if (!this.store) return;
+    room.dirty = true;
+    if (!room.saveTimer) room.saveTimer = setTimeout(() => this.flushRoom(room), this.saveDelay);
+  }
+
+  async flushRoom(room) {
+    clearTimeout(room.saveTimer);
+    room.saveTimer = null;
+    if (!this.store) return;
+    while (room.saving) await room.saving;
+    if (!room.dirty) return;
+    room.dirty = false;
+    const code = room.code;
+    const op = room.closed ? this.store.remove(code) : this.store.save(code, JSON.stringify(room));
+    room.saving = op
+      .catch((err) => {
+        console.error(`[room ${code}] 저장 실패: ${err.message}`);
+        room.dirty = true;
+        if (!room.saveTimer) room.saveTimer = setTimeout(() => this.flushRoom(room), 5000);
+      })
+      .finally(() => {
+        room.saving = null;
+      });
+    await room.saving;
+  }
+
+  async flushAll() {
+    await Promise.all([...this.rooms.values()].map((room) => this.flushRoom(room)));
+  }
+
   // 오래 비어 있는 방 정리
-  sweep(maxIdleMs = 6 * 60 * 60 * 1000) {
+  async sweep({ maxIdleMs, storeMaxAgeMs = 7 * 24 * 60 * 60 * 1000 } = {}) {
+    // 저장소가 있으면 메모리에서 일찍 내려도 다시 불러올 수 있다
+    const idle = maxIdleMs ?? (this.store ? 30 * 60 * 1000 : 6 * 60 * 60 * 1000);
     const now = Date.now();
     for (const [code, room] of this.rooms) {
       const empty = room.listeners.size === 0;
-      if (room.closed || (empty && now - room.touched > maxIdleMs)) {
+      if (room.closed || (empty && now - room.touched > idle)) {
+        await this.flushRoom(room);
+        if (room.dirty) continue; // 저장에 실패하면 메모리에 남긴다
         clearTimeout(room.aiTimer);
+        room.aiTimer = null;
         this.rooms.delete(code);
       }
     }
+    if (this.store) await this.store.cleanup(storeMaxAgeMs);
   }
 }
