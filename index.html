@@ -3,18 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1b2340">
-  <meta name="description" content="PC와 모바일에서 즐기는 도트 아트 카탄 보드게임">
-  <title>픽셀 카탄</title>
+  <meta name="theme-color" content="#5a3d26">
+  <meta name="description" content="PC와 모바일에서 친구·컴퓨터와 즐기는 카탄 보드게임">
+  <title>카탄 개척자</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;500;700&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <div id="app">
     <!-- 시작 화면 -->
     <section id="start-screen" class="screen">
-      <div class="start-box pixel-box">
-        <canvas id="logo" width="160" height="48" aria-hidden="true"></canvas>
-        <h1>픽셀 카탄</h1>
+      <div class="start-box panel">
+        <canvas id="logo" aria-hidden="true"></canvas>
+        <h1>카탄 개척자</h1>
         <p class="subtitle">섬을 개척하고 10점을 먼저 모으세요!</p>
 
         <div class="setting-row">
@@ -53,7 +56,7 @@
 
     <!-- 온라인 대기실 -->
     <section id="lobby-screen" class="screen hidden">
-      <div class="start-box pixel-box">
+      <div class="start-box panel">
         <h1 class="lobby-title">대기실</h1>
         <p class="subtitle">친구에게 방 코드나 초대 링크를 보내 주세요.</p>
         <div class="room-code" id="lobby-code" aria-label="방 코드"></div>
@@ -85,9 +88,9 @@
         <div id="prompt" aria-live="polite"></div>
       </div>
       <aside id="side">
-        <div id="hand" class="pixel-box"></div>
+        <div id="hand" class="panel"></div>
         <div id="actions"></div>
-        <details id="log-box" class="pixel-box" open>
+        <details id="log-box" class="panel" open>
           <summary>기록</summary>
           <ol id="log"></ol>
         </details>
@@ -95,7 +98,7 @@
     </section>
 
     <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
-      <div class="modal-box pixel-box"></div>
+      <div class="modal-box panel"></div>
     </div>
     <div id="toast" class="hidden"></div>
   </div>

@@ -5,7 +5,7 @@ import {
 import { Game, RuleError, handTotal } from './game.js';
 import { chooseAction, respondToTrade } from './ai.js';
 import { BoardRenderer, LOGICAL_W, LOGICAL_H } from './render.js';
-import { iconURL, drawSprite, ICONS, SETTLEMENT, CITY, ROBBER, pieceColors } from './sprites.js';
+import { iconURL, pieceColors, drawLogo as paintLogo } from './art.js';
 import { h, $ } from './dom.js';
 import { RULES_HTML } from './rules.js';
 import { serverAvailable, createRoom, joinRoom, OnlineSession } from './net.js';
@@ -129,26 +129,7 @@ function closeModal() {
 
 // ---------- 시작 화면 ----------
 function drawLogo() {
-  const c = $('#logo');
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, c.width, c.height);
-  ctx.fillStyle = '#2b5fae';
-  ctx.fillRect(0, 30, 160, 18);
-  ctx.fillStyle = '#5d93dc';
-  for (let x = 0; x < 160; x += 9) ctx.fillRect(x + ((x / 9) % 2) * 3, 40, 4, 1);
-  ctx.fillStyle = '#e4cc92';
-  ctx.fillRect(8, 28, 144, 4);
-  ctx.fillStyle = '#7cc04c';
-  ctx.fillRect(10, 24, 140, 5);
-  const icons = ['wood', 'brick', 'wool', 'grain', 'ore'];
-  icons.forEach((r, i) => drawSprite(ctx, ICONS[r], 14 + i * 13, 15));
-  drawSprite(ctx, SETTLEMENT, 84, 17, pieceColors(PLAYER_COLORS[0]));
-  drawSprite(ctx, CITY, 96, 14, pieceColors(PLAYER_COLORS[1]));
-  drawSprite(ctx, SETTLEMENT, 112, 17, pieceColors(PLAYER_COLORS[2]));
-  drawSprite(ctx, ROBBER, 126, 14);
-  drawSprite(ctx, ICONS.wood, 136, 15);
-  ctx.fillStyle = '#fcd84c';
-  for (const [x, y] of [[20, 4], [60, 8], [100, 3], [140, 7], [80, 1]]) ctx.fillRect(x, y, 1, 1);
+  paintLogo($('#logo'), PLAYER_COLORS);
 }
 
 function defaultSeats() {
@@ -434,7 +415,7 @@ function renderPlayers() {
     const pub = g.victoryPoints(i, { includeHidden: false });
     const all = g.victoryPoints(i);
     const showHidden = (i === app.viewer || s.phase === 'gameOver') && all > pub;
-    const card = h('div', { class: `pcard pixel-box${i === s.current ? ' current' : ''}` },
+    const card = h('div', { class: `pcard panel${i === s.current ? ' current' : ''}` },
       h('div', { class: 'pname' },
         h('span', { class: 'swatch', style: { background: color(i).main } }),
         h('span', { class: 'nm' }, pl.name),
@@ -450,6 +431,7 @@ function renderPlayers() {
         pl.isAI ? h('span', { class: 'badge ai' }, 'AI') : null,
         app.net && !pl.isAI && app.room?.seats[i]?.online === false ? h('span', { class: 'badge off' }, '접속 끊김') : null,
         app.net && i === app.viewer ? h('span', { class: 'badge army' }, '나') : null));
+    card.style.setProperty('--pc', color(i).main);
     wrap.append(card);
   });
 }
@@ -469,7 +451,7 @@ function renderHand() {
   for (const r of RESOURCES) {
     const n = pl.resources[r];
     const got = app.prevHand && n > app.prevHand[r];
-    row.append(h('div', { class: `rcard${n === 0 ? ' zero' : ''}${got ? ' gain' : ''}`, title: RESOURCE_NAMES[r] },
+    row.append(h('div', { class: `rcard${n === 0 ? ' zero' : ''}${got ? ' gain' : ''}`, title: RESOURCE_NAMES[r], 'data-res': r },
       resIcon(r, 28), h('span', { class: 'n' }, n), h('span', { class: 'nm' }, RESOURCE_NAMES[r])));
   }
   el.append(row);

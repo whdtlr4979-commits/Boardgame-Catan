@@ -1,4 +1,4 @@
-// 픽셀 카탄 서버: 정적 파일 + 온라인 방 API + 방 상태 저장
+// 카탄 개척자 서버: 정적 파일 + 온라인 방 API + 방 상태 저장
 //   node server/server.js   (PORT 환경 변수, 기본 8080)
 import http from 'node:http';
 import fs from 'node:fs';
@@ -184,7 +184,7 @@ async function main() {
   const manager = new RoomManager({ store });
   const server = createServer({ manager });
   const port = Number(process.env.PORT) || 8080;
-  server.listen(port, () => console.log(`픽셀 카탄 서버: http://localhost:${port}`));
+  server.listen(port, () => console.log(`카탄 개척자 서버: http://localhost:${port}`));
 
   // 종료 신호를 받으면 저장하지 못한 방을 마저 저장한다 (Render는 잠들거나 재배포할 때 SIGTERM을 보낸다)
   let stopping = false;

@@ -1,7 +1,7 @@
 // 보드 위상(헥스·꼭짓점·변)과 무작위 보드 생성
 import { TERRAIN_COUNTS, NUMBER_TOKENS, PORT_TYPES } from './constants.js';
 
-// 픽셀 단위 헥스 격자 간격 (뾰족한 꼭대기 헥스)
+// 논리 좌표 단위 헥스 격자 간격 (뾰족한 꼭대기 헥스)
 export const HEX_DX = 48;
 export const HEX_DY = 42;
 const T = (HEX_DX * HEX_DX / 4 + HEX_DY * HEX_DY) / (2 * HEX_DY); // 중심→위 꼭짓점 거리
