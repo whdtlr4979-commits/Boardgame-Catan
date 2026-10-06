@@ -52,19 +52,22 @@ ROOMS_DIR=./rooms npm start                                    # 파일로 저�
 DATABASE_URL=postgres://user:pass@host:5432/db npm start       # Postgres로 저장
 ```
 
-### 인터넷에 공개하기 (예: Render 무료 플랜)
+### 인터넷에 공개하기 (예: Render 무료 플랜 + Supabase)
 
-1. [render.com](https://render.com)에서 **New → Blueprint**를 고르고 이 저장소를 연결합니다.
-   (`render.yaml`이 있어 설정이 자동으로 채워집니다.)
-2. 배포가 끝나면 나오는 `https://...onrender.com` 주소로 접속해 친구들과 플레이합니다.
-
-무료 플랜은 15분 동안 접속이 없으면 서버가 잠들고, 잠들거나 재배포할 때 디스크 내용도 사라집니다.
+Render 무료 플랜은 15분 동안 접속이 없으면 서버가 잠들고, 잠들거나 재배포할 때 디스크 내용도 사라집니다.
 그래서 **Render에서는 Postgres 데이터베이스를 연결해야** 방이 유지됩니다.
 
-1. [Neon](https://neon.tech)이나 [Supabase](https://supabase.com)에서 무료 Postgres 데이터베이스를 만들고 연결 주소(`postgres://...`)를 복사합니다.
-   (Render의 무료 Postgres는 30일 뒤 만료되므로 이 둘을 권장합니다.)
-2. Render 서비스의 **Environment**에 `DATABASE_URL`로 그 주소를 넣습니다.
-3. 서버 로그에 `방 저장소: postgres`가 보이면 연결된 것입니다. `/api/health`의 `storage` 값으로도 확인할 수 있습니다.
+1. **데이터베이스 만들기**: [Supabase](https://supabase.com)에서 새 프로젝트를 만듭니다 (리전: Seoul).
+   - Data API와 "Automatically expose new tables"는 끄고, "Enable automatic RLS"는 켭니다. 이 게임은 연결 주소로 직접 접속하므로 Data API가 필요 없습니다.
+   - 프로젝트의 **Connect** → **Session pooler** 연결 주소를 복사하고 `[YOUR-PASSWORD]`를 실제 비밀번호로 바꿉니다.
+     (Direct connection은 IPv6 전용이라 Render에서 접속되지 않을 수 있습니다.)
+   - [Neon](https://neon.tech)도 됩니다. Render의 무료 Postgres는 30일 뒤 만료되므로 권장하지 않습니다.
+2. **서버 배포**: [render.com](https://render.com)에서 **New → Blueprint**를 고르고 이 저장소를 연결합니다.
+   `render.yaml`에 리전(Singapore), 브랜치(`main`), 빌드·실행 명령, `DATABASE_SSL=no-verify`가 들어 있어서
+   **`DATABASE_URL`만 입력**하면 됩니다. 연결 주소 끝에 `?sslmode=require`는 붙이지 마세요.
+3. **확인**: 서버 로그에 `방 저장소: postgres`가 보이면 연결된 것입니다. `https://<서비스 주소>/api/health`의 `storage` 값으로도 확인할 수 있습니다.
+
+`main`에 머지할 때마다 자동으로 다시 배포됩니다.
 
 Railway, Fly.io 등 Node.js를 실행할 수 있는 곳이면 어디든 `npm start`로 동작합니다 (`PORT` 환경 변수 사용).
 
