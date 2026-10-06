@@ -127,7 +127,7 @@ test('HTTP API와 SSE 실시간 전달', async () => {
     const health = await fetch(`${base}/api/health`).then((r) => r.json());
     assert.equal(health.ok, true);
     const html = await fetch(`${base}/`).then((r) => r.text());
-    assert.match(html, /픽셀 카탄/);
+    assert.match(html, /카탄 개척자/);
     assert.equal((await fetch(`${base}/server/rooms.js`)).status, 404);
     assert.equal((await fetch(`${base}/js/../server/rooms.js`)).status, 404);
 
