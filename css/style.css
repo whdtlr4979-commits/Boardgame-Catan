@@ -431,5 +431,8 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+  /* 주사위 연출(.dice-stage)은 설정과 상관없이 항상 움직인다 */
+  *:not(.dice-stage):not(.dice-stage *),
+  *:not(.dice-stage *)::before,
+  *:not(.dice-stage *)::after { animation: none !important; transition: none !important; }
 }
