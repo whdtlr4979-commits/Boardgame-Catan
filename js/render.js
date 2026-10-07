@@ -1,11 +1,8 @@
-// 보드 렌더러: 화면 해상도 그대로 벡터로 그린다 (지형·토큰·항구는 캐시, 말과 강조 표시는 매 프레임)
-import { TOPO, HEX_DY, CORNER_OFFSETS, portGeometry } from './board.js';
+// 보드 렌더러: 화면 해상도 그대로 벡터로 그린다 (바다 틀·지형·토큰·항구는 캐시, 말과 강조 표시는 매 프레임)
+import { TOPO, HEX_DY, CORNER_OFFSETS } from './board.js';
 import { PIPS, PLAYER_COLORS } from './constants.js';
-import {
-  TERRAIN_STYLE, RES_COLORS, seeded, shade,
-  drawTree, drawSheep, drawTuft, drawWheat, drawBricks, drawMound, drawPeak, drawDune, drawCactus, drawRock,
-  drawSettlement, drawCity, drawRoad, drawRobber, iconURL,
-} from './art.js';
+import { RES_COLORS, seeded, drawSettlement, drawCity, drawRoad, drawRobber, iconURL } from './art.js';
+import { paintTile, TILE_SCALE } from './terrain.js';
 
 export const LOGICAL_W = 304;
 export const LOGICAL_H = 292;
@@ -13,6 +10,9 @@ const OX = LOGICAL_W / 2;
 const OY = LOGICAL_H / 2;
 const TOKEN_R = 10;
 const NUMBER_FONT = 'Georgia, "Times New Roman", serif';
+// 바다 틀: 위아래가 평평한 큰 육각형 (실제 카탄의 바다 틀 모양)
+const FRAME_R = 151;
+const FRAME_RIM = 3.2;
 
 function hexPath(ctx, cx, cy, scale) {
   ctx.beginPath();
@@ -25,127 +25,55 @@ function hexPath(ctx, cx, cy, scale) {
   ctx.closePath();
 }
 
-// 지형별 장식 위치 (타일 중심 기준, 숫자 토큰을 피한다)
-const ANCHORS = [[-12, -15], [5, -19], [14, -9], [-17, -1], [16, 6], [-13, 12], [0, 19], [10, 16]];
-
-function decorateTile(ctx, terrain, cx, cy, id) {
-  const rnd = seeded(id * 7 + terrain.length);
-  const jitter = () => (rnd() - 0.5) * 2.4;
-  const items = [];
-  const at = (i) => [cx + ANCHORS[i][0] + jitter(), cy + ANCHORS[i][1] + jitter()];
-
-  if (terrain === 'forest') {
-    // 바닥 질감
-    for (let i = 0; i < 14; i++) {
-      ctx.fillStyle = `rgba(20,60,20,${0.12 + rnd() * 0.1})`;
-      ctx.beginPath();
-      ctx.arc(cx + (rnd() - 0.5) * 44, cy + (rnd() - 0.5) * 50, 2 + rnd() * 3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ANCHORS.forEach((_, i) => {
-      const [x, y] = at(i);
-      items.push([y, () => drawTree(ctx, x, y, 0.85 + rnd() * 0.25, rnd() < 0.3)]);
-    });
-  } else if (terrain === 'pasture') {
-    for (let i = 0; i < 18; i++) {
-      ctx.fillStyle = `rgba(255,255,220,${0.12 + rnd() * 0.12})`;
-      ctx.beginPath();
-      ctx.arc(cx + (rnd() - 0.5) * 44, cy + (rnd() - 0.5) * 50, 1 + rnd() * 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    [0, 2, 6].forEach((i) => {
-      const [x, y] = at(i);
-      items.push([y, () => drawSheep(ctx, x - 1, y, 0.85)]);
-    });
-    [1, 3, 4, 5, 7].forEach((i) => {
-      const [x, y] = at(i);
-      items.push([y, () => drawTuft(ctx, x, y, 1.2)]);
-    });
-  } else if (terrain === 'fields') {
-    // 밭고랑
-    ctx.strokeStyle = 'rgba(176,120,30,0.28)';
-    ctx.lineWidth = 1.1;
-    for (let i = -8; i <= 8; i++) {
-      ctx.beginPath();
-      ctx.moveTo(cx - 30, cy + i * 4.2 - 12);
-      ctx.lineTo(cx + 30, cy + i * 4.2 + 12);
-      ctx.stroke();
-    }
-    ANCHORS.forEach((_, i) => {
-      if (i === 3 || i === 4) return;
-      const [x, y] = at(i);
-      items.push([y, () => drawWheat(ctx, x, y + 2, 0.8)]);
-    });
-  } else if (terrain === 'hills') {
-    for (let i = 0; i < 10; i++) {
-      ctx.fillStyle = `rgba(120,50,20,${0.1 + rnd() * 0.1})`;
-      ctx.beginPath();
-      ctx.ellipse(cx + (rnd() - 0.5) * 44, cy + (rnd() - 0.5) * 50, 3 + rnd() * 3, 1.5 + rnd(), 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    [0, 7].forEach((i) => {
-      const [x, y] = at(i);
-      items.push([y, () => drawBricks(ctx, x, y, 0.85)]);
-    });
-    [1, 2, 3, 4, 5, 6].forEach((i) => {
-      const [x, y] = at(i);
-      items.push([y, () => drawMound(ctx, x, y, 0.8 + rnd() * 0.3)]);
-    });
-  } else if (terrain === 'mountains') {
-    for (const [dx, dy, w, h] of [[-9, -8, 17, 14], [7, -9, 18, 15.5], [-14, 15, 12, 9], [12, 17, 12, 9.5]]) {
-      const x = cx + dx + jitter() * 0.5;
-      const y = cy + dy;
-      items.push([y, () => drawPeak(ctx, x, y, w, h)]);
-    }
-  } else if (terrain === 'desert') {
-    [0, 2, 5, 7].forEach((i) => {
-      const [x, y] = at(i);
-      items.push([y - 5, () => drawDune(ctx, x, y, 1)]);
-    });
-    [1, 6].forEach((i) => {
-      const [x, y] = at(i);
-      items.push([y, () => drawCactus(ctx, x, y, 0.9)]);
-    });
-    [3, 4].forEach((i) => {
-      const [x, y] = at(i);
-      items.push([y, () => drawRock(ctx, x, y, 1)]);
-    });
+function framePath(ctx, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (i * Math.PI) / 3;
+    const x = Math.cos(a) * r;
+    const y = Math.sin(a) * r;
+    if (i) ctx.lineTo(x, y);
+    else ctx.moveTo(x, y);
   }
-  items.sort((a, b) => a[0] - b[0]).forEach(([, draw]) => draw());
+  ctx.closePath();
 }
 
 function drawToken(ctx, cx, cy, n, k) {
+  // 두꺼운 종이 토큰: 옆면 → 윗면
   ctx.save();
-  ctx.shadowColor = 'rgba(40,25,10,0.45)';
-  ctx.shadowBlur = 2.2 * k;
-  ctx.shadowOffsetY = 0.8 * k;
-  const g = ctx.createRadialGradient(cx - 3, cy - 3, 1, cx, cy, TOKEN_R);
-  g.addColorStop(0, '#fffaf0');
-  g.addColorStop(1, '#ecdcb4');
+  ctx.shadowColor = 'rgba(30,18,6,0.45)';
+  ctx.shadowBlur = 2 * k;
+  ctx.shadowOffsetY = 1 * k;
+  ctx.beginPath();
+  ctx.arc(cx, cy + 1, TOKEN_R, 0, Math.PI * 2);
+  ctx.fillStyle = '#b39667';
+  ctx.fill();
+  ctx.restore();
+  const g = ctx.createRadialGradient(cx - 3.5, cy - 4, 1, cx, cy, TOKEN_R);
+  g.addColorStop(0, '#fffbef');
+  g.addColorStop(0.75, '#f4e6c3');
+  g.addColorStop(1, '#e6d2a4');
   ctx.beginPath();
   ctx.arc(cx, cy, TOKEN_R, 0, Math.PI * 2);
   ctx.fillStyle = g;
   ctx.fill();
-  ctx.restore();
-  ctx.strokeStyle = '#c4ab7c';
-  ctx.lineWidth = 0.6;
-  ctx.beginPath();
-  ctx.arc(cx, cy, TOKEN_R - 0.3, 0, Math.PI * 2);
+  ctx.strokeStyle = '#a98b5a';
+  ctx.lineWidth = 0.5;
   ctx.stroke();
-  ctx.strokeStyle = 'rgba(196,171,124,0.5)';
+  ctx.strokeStyle = 'rgba(169,139,90,0.45)';
+  ctx.lineWidth = 0.4;
   ctx.beginPath();
-  ctx.arc(cx, cy, TOKEN_R - 1.6, 0, Math.PI * 2);
+  ctx.arc(cx, cy, TOKEN_R - 1.5, 0, Math.PI * 2);
   ctx.stroke();
   const red = n === 6 || n === 8;
-  ctx.fillStyle = red ? '#c0392b' : '#3b2a1e';
-  ctx.font = `bold ${red ? 9.6 : 8.6}px ${NUMBER_FONT}`;
+  ctx.fillStyle = red ? '#c62f22' : '#2e2118';
+  ctx.font = `bold ${red ? 10 : 8.8}px ${NUMBER_FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(String(n), cx, cy - 1.4);
+  ctx.fillText(String(n), cx, cy - 1.3);
   const pips = PIPS[n];
   for (let i = 0; i < pips; i++) {
     ctx.beginPath();
-    ctx.arc(cx + (i - (pips - 1) / 2) * 1.7, cy + 5, 0.62, 0, Math.PI * 2);
+    ctx.arc(cx + (i - (pips - 1) / 2) * 1.7, cy + 5.2, 0.66, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -160,50 +88,159 @@ function iconImage(name) {
   return iconImages.get(name);
 }
 
+// 항구 토큰 위치: 해안 변 가운데에서 바다 쪽으로
+function portSpot(edgeId) {
+  const e = TOPO.edges[edgeId];
+  const h = TOPO.hexes[e.hexes[0]];
+  const nx = e.x - h.x;
+  const ny = e.y - h.y;
+  const len = Math.hypot(nx, ny);
+  return { x: e.x + (nx / len) * 15.5, y: e.y + (ny / len) * 15.5 };
+}
+
+// 나무 잔교: 판자와 말뚝
+function drawPier(ctx, x1, y1, x2, y2) {
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  ctx.save();
+  ctx.translate(x1, y1);
+  ctx.rotate(Math.atan2(y2 - y1, x2 - x1));
+  ctx.fillStyle = 'rgba(0,30,50,0.3)';
+  ctx.fillRect(0.6, -1.1, len, 3.2);
+  for (let d = 2; d < len; d += 3.2) {
+    for (const side of [-1.9, 1.9]) {
+      ctx.beginPath();
+      ctx.arc(d, side, 0.6, 0, Math.PI * 2);
+      ctx.fillStyle = '#4a2f18';
+      ctx.fill();
+    }
+  }
+  ctx.fillStyle = '#b07a44';
+  ctx.fillRect(0, -1.5, len, 3);
+  ctx.strokeStyle = '#6e4724';
+  ctx.lineWidth = 0.3;
+  for (let d = 0.8; d < len; d += 1.1) {
+    ctx.beginPath();
+    ctx.moveTo(d, -1.5);
+    ctx.lineTo(d, 1.5);
+    ctx.stroke();
+  }
+  ctx.strokeRect(0, -1.5, len, 3);
+  ctx.restore();
+}
+
 function drawPort(ctx, port, k) {
-  const g = portGeometry(port.edge);
-  // 나무 부두
+  const g = portSpot(port.edge);
   for (const v of port.vertices) {
     const vv = TOPO.vertices[v];
-    const sx = vv.x + (g.x - vv.x) * 0.12;
-    const sy = vv.y + (g.y - vv.y) * 0.12;
-    ctx.strokeStyle = '#5a3a1c';
-    ctx.lineWidth = 2.4;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(g.x, g.y);
-    ctx.stroke();
-    ctx.strokeStyle = '#b07a44';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
+    const tx = vv.x + (g.x - vv.x) * 0.16;
+    const ty = vv.y + (g.y - vv.y) * 0.16;
+    drawPier(ctx, g.x, g.y, tx, ty);
   }
   const ring = port.type === 'generic' ? '#2f6f9a' : RES_COLORS[port.type];
   ctx.save();
-  ctx.shadowColor = 'rgba(0,30,50,0.4)';
+  ctx.shadowColor = 'rgba(0,25,45,0.45)';
   ctx.shadowBlur = 2 * k;
-  ctx.shadowOffsetY = 0.7 * k;
+  ctx.shadowOffsetY = 0.8 * k;
   ctx.beginPath();
-  ctx.arc(g.x, g.y, 8.6, 0, Math.PI * 2);
-  ctx.fillStyle = '#fffaf0';
+  ctx.arc(g.x, g.y + 0.9, 8.4, 0, Math.PI * 2);
+  ctx.fillStyle = '#b39667';
   ctx.fill();
   ctx.restore();
-  ctx.lineWidth = 1.4;
+  const face = ctx.createRadialGradient(g.x - 3, g.y - 3, 1, g.x, g.y, 8.4);
+  face.addColorStop(0, '#fffbef');
+  face.addColorStop(1, '#eedfb8');
+  ctx.beginPath();
+  ctx.arc(g.x, g.y, 8.4, 0, Math.PI * 2);
+  ctx.fillStyle = face;
+  ctx.fill();
+  ctx.lineWidth = 1.5;
   ctx.strokeStyle = ring;
   ctx.beginPath();
-  ctx.arc(g.x, g.y, 7.9, 0, Math.PI * 2);
+  ctx.arc(g.x, g.y, 7.5, 0, Math.PI * 2);
   ctx.stroke();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#3b2a1e';
+  ctx.fillStyle = '#2e2118';
   if (port.type === 'generic') {
-    ctx.font = `bold 6px ${NUMBER_FONT}`;
-    ctx.fillText('3:1', g.x, g.y + 0.3);
+    ctx.font = `bold 4px ${NUMBER_FONT}`;
+    ctx.fillStyle = '#2f6f9a';
+    ctx.fillText('?', g.x, g.y - 3.6);
+    ctx.fillStyle = '#2e2118';
+    ctx.font = `bold 5.6px ${NUMBER_FONT}`;
+    ctx.fillText('3:1', g.x, g.y + 1.2);
   } else {
     const img = iconImage(port.type);
     if (img.complete) ctx.drawImage(img, g.x - 4.4, g.y - 7.2, 8.8, 8.8);
     ctx.font = `bold 4.6px ${NUMBER_FONT}`;
-    ctx.fillText('2:1', g.x, g.y + 4.4);
+    ctx.fillText('2:1', g.x, g.y + 4.3);
+  }
+}
+
+// 바다 틀과 얕은 물가
+function drawSea(ctx, k) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(20,10,0,0.55)';
+  ctx.shadowBlur = 6 * k;
+  ctx.shadowOffsetY = 3 * k;
+  framePath(ctx, FRAME_R);
+  ctx.fillStyle = '#163f63';
+  ctx.fill();
+  ctx.restore();
+  const sea = ctx.createRadialGradient(0, 0, 80, 0, 0, FRAME_R);
+  sea.addColorStop(0, '#3f9cc6');
+  sea.addColorStop(1, '#2468a0');
+  framePath(ctx, FRAME_R - FRAME_RIM);
+  ctx.fillStyle = sea;
+  ctx.fill();
+  ctx.save();
+  framePath(ctx, FRAME_R - FRAME_RIM);
+  ctx.clip();
+  // 물결 무늬
+  const rnd = seeded(99);
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 70; i++) {
+    const x = (rnd() - 0.5) * FRAME_R * 2;
+    const y = (rnd() - 0.5) * FRAME_R * 1.8;
+    const r = 2.5 + rnd() * 2.5;
+    ctx.strokeStyle = `rgba(255,255,255,${0.12 + rnd() * 0.14})`;
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(x - r, y);
+    ctx.bezierCurveTo(x - r * 0.4, y - r * 0.5, x + r * 0.4, y + r * 0.5, x + r, y);
+    ctx.stroke();
+  }
+  // 틀 조각 사이 이음매
+  ctx.strokeStyle = 'rgba(10,40,70,0.35)';
+  ctx.lineWidth = 0.6;
+  for (let i = 0; i < 6; i++) {
+    const a = (i * Math.PI) / 3 + Math.PI / 6;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 118, Math.sin(a) * 118);
+    ctx.lineTo(Math.cos(a) * FRAME_R, Math.sin(a) * FRAME_R);
+    ctx.stroke();
+  }
+  ctx.restore();
+  // 틀 가장자리 빛
+  framePath(ctx, FRAME_R - FRAME_RIM);
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 0.6;
+  ctx.stroke();
+  framePath(ctx, FRAME_R - 0.5);
+  ctx.strokeStyle = 'rgba(120,170,210,0.5)';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+  // 섬 둘레의 얕은 물과 물거품
+  for (const [scale, fill] of [[1.22, 'rgba(110,200,220,0.28)'], [1.12, 'rgba(160,230,235,0.35)']]) {
+    ctx.fillStyle = fill;
+    for (const h of TOPO.hexes) {
+      hexPath(ctx, h.x, h.y, scale);
+      ctx.fill();
+    }
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  for (const h of TOPO.hexes) {
+    hexPath(ctx, h.x, h.y, 1.045);
+    ctx.fill();
   }
 }
 
@@ -239,73 +276,40 @@ export class BoardRenderer {
     const k = this.k;
     ctx.setTransform(k, 0, 0, k, 0, 0);
 
-    // 바다
-    const sea = ctx.createRadialGradient(OX, OY, 40, OX, OY, 210);
-    sea.addColorStop(0, '#5fb8d8');
-    sea.addColorStop(1, '#276f9c');
-    ctx.fillStyle = sea;
-    ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
-    const rnd = seeded(99);
-    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-    ctx.lineWidth = 0.8;
-    ctx.lineCap = 'round';
-    for (let i = 0; i < 46; i++) {
-      const x = rnd() * LOGICAL_W;
-      const y = rnd() * LOGICAL_H;
-      ctx.beginPath();
-      ctx.arc(x, y, 3 + rnd() * 2, Math.PI * 1.15, Math.PI * 1.85);
-      ctx.stroke();
-    }
-
+    // 바다 틀
     ctx.translate(OX, OY);
-    // 물거품과 모래사장
-    ctx.fillStyle = 'rgba(255,255,255,0.28)';
-    for (const h of TOPO.hexes) {
-      hexPath(ctx, h.x, h.y, 1.24);
-      ctx.fill();
-    }
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,40,60,0.35)';
-    ctx.shadowBlur = 4 * k;
-    ctx.fillStyle = '#ecd9a6';
-    for (const h of TOPO.hexes) {
-      hexPath(ctx, h.x, h.y, 1.14);
-      ctx.fill();
-    }
-    ctx.restore();
-
+    drawSea(ctx, k);
     for (const port of board.ports) drawPort(ctx, port, k);
+
+    // 타일 사이 틈
+    ctx.fillStyle = '#4a3622';
+    for (const h of TOPO.hexes) {
+      hexPath(ctx, h.x, h.y, 1.005);
+      ctx.fill();
+    }
 
     // 지형 타일
     for (const h of TOPO.hexes) {
       const terrain = board.hexes[h.id].terrain;
-      const st = TERRAIN_STYLE[terrain];
       ctx.save();
-      ctx.shadowColor = 'rgba(70,45,15,0.45)';
-      ctx.shadowBlur = 2.5 * k;
-      ctx.shadowOffsetY = 0.8 * k;
-      hexPath(ctx, h.x, h.y, 0.95);
-      const g = ctx.createLinearGradient(h.x - 18, h.y - 26, h.x + 18, h.y + 26);
-      g.addColorStop(0, st.light);
-      g.addColorStop(1, st.dark);
-      ctx.fillStyle = g;
-      ctx.fill();
-      ctx.restore();
-      ctx.save();
-      hexPath(ctx, h.x, h.y, 0.95);
+      hexPath(ctx, h.x, h.y, TILE_SCALE);
       ctx.clip();
-      decorateTile(ctx, terrain, h.x, h.y, h.id);
+      paintTile(ctx, terrain, h.x, h.y, h.id);
+      // 두꺼운 타일 가장자리: 위는 밝고 아래는 어둡게
+      const bevel = ctx.createLinearGradient(h.x - 16, h.y - 26, h.x + 16, h.y + 26);
+      bevel.addColorStop(0, 'rgba(255,250,225,0.6)');
+      bevel.addColorStop(0.48, 'rgba(255,255,255,0)');
+      bevel.addColorStop(0.52, 'rgba(0,0,0,0)');
+      bevel.addColorStop(1, 'rgba(30,15,0,0.5)');
+      hexPath(ctx, h.x, h.y, TILE_SCALE);
+      ctx.strokeStyle = bevel;
+      ctx.lineWidth = 2.6;
+      ctx.stroke();
       ctx.restore();
-      hexPath(ctx, h.x, h.y, 0.9);
-      ctx.strokeStyle = 'rgba(255,255,255,0.28)';
-      ctx.lineWidth = 0.8;
+      hexPath(ctx, h.x, h.y, TILE_SCALE);
+      ctx.strokeStyle = 'rgba(35,22,10,0.6)';
+      ctx.lineWidth = 0.5;
       ctx.stroke();
-      hexPath(ctx, h.x, h.y, 0.95);
-      ctx.strokeStyle = shade(st.dark, -0.35);
-      ctx.globalAlpha = 0.6;
-      ctx.lineWidth = 0.6;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
     }
 
     for (const h of TOPO.hexes) {
@@ -368,14 +372,14 @@ export class BoardRenderer {
     }
 
     const rh = TOPO.hexes[state.board.robber];
-    drawRobber(ctx, rh.x - 15, rh.y + 6, k);
+    drawRobber(ctx, rh.x - 15, rh.y + 7);
 
     const sorted = Object.entries(state.buildings).sort((a, b) => TOPO.vertices[a[0]].y - TOPO.vertices[b[0]].y);
     for (const [v, b] of sorted) {
       const vv = TOPO.vertices[v];
       const color = PLAYER_COLORS[state.players[b.player].color];
-      if (b.type === 'city') drawCity(ctx, vv.x, vv.y, color, k);
-      else drawSettlement(ctx, vv.x, vv.y, color, k);
+      if (b.type === 'city') drawCity(ctx, vv.x, vv.y, color);
+      else drawSettlement(ctx, vv.x, vv.y, color);
     }
 
     // 선택할 수 있는 곳: 은은하게 맥박치는 빛
