@@ -345,6 +345,8 @@ export class Room {
       pl.devCards = pl.devCards.map((c) => ({ type: 'hidden', turn: c.turn }));
     });
     st.devDeck = st.devDeck.map(() => 'hidden');
+    // 지난 기록은 보내지 않는다 (화면에는 방금 일어난 일 하나만 잠깐 보여 준다)
+    st.log = st.log.slice(-1);
     if (st.lastSteal && seat !== st.lastSteal.thief && seat !== st.lastSteal.victim) st.lastSteal = { ...st.lastSteal, resource: null };
     if (st.lastDevBought && st.lastDevBought.player !== seat) st.lastDevBought = { ...st.lastDevBought, type: null };
     return { ...meta, state: st };

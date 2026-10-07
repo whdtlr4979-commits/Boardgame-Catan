@@ -93,7 +93,8 @@ export class Game {
   }
 
   log(text, player = null) {
-    this.state.log.push({ text, player });
+    this.state.logSeq = (this.state.logSeq || 0) + 1;
+    this.state.log.push({ text, player, seq: this.state.logSeq });
     if (this.state.log.length > 300) this.state.log.splice(0, this.state.log.length - 300);
   }
 

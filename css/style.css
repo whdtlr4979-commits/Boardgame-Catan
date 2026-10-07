@@ -159,29 +159,92 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
   margin: 0 auto;
   padding: 6px 10px calc(env(safe-area-inset-bottom) + 12px);
 }
-#topbar { grid-area: top; display: flex; align-items: center; gap: 10px; padding: 2px 0; color: #fff; }
+#topbar { grid-area: top; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 2px 0; color: #fff; }
 #topbar .btn { flex: none; }
-#turn-info { flex: 1; font-family: var(--display); font-size: 18px; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#dice { display: flex; gap: 6px; }
+/* 차례 배너: 누구 차례인지, 무엇을 하는 단계인지 */
+#turn-info { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5); }
+#turn-info .avatar { width: 18px; height: 18px; }
+.turn-name { font-family: var(--display); font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.phase-chip { flex: none; font-size: 12.5px; font-weight: 700; color: var(--ink); background: var(--gold); border-radius: 999px; padding: 3px 10px; text-shadow: none; box-shadow: 0 2px 0 #a87916; white-space: nowrap; }
+.turn-no { flex: none; font-size: 12px; opacity: 0.85; white-space: nowrap; }
+/* 방금 일어난 일 (쌓이지 않고 잠깐 보였다 사라진다) */
+#ticker {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(30, 18, 8, 0.55);
+  font-size: 13.5px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.35s, transform 0.35s;
+  min-width: 0;
+}
+#ticker.show { opacity: 1; transform: none; }
+#ticker .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+#ticker .txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+#dice { display: flex; gap: 6px; min-height: 34px; }
 .die { width: 34px; height: 34px; background: linear-gradient(145deg, #ffffff, #ede4d3); border-radius: 8px; box-shadow: 0 3px 0 #c8b897, 0 5px 10px rgba(0, 0, 0, 0.35); display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 5px; }
 .die i { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); margin: auto; visibility: hidden; }
 .die i.on { visibility: visible; }
 .die.red { background: linear-gradient(145deg, #e66b55, #c0392b); box-shadow: 0 3px 0 #8d2a1f, 0 5px 10px rgba(0, 0, 0, 0.35); }
 .die.red i { background: #fff6e8; }
-.die.rolling { animation: tumble 0.18s linear infinite; }
-@keyframes tumble { 0% { transform: rotate(-12deg) translateY(-2px); } 50% { transform: rotate(10deg) translateY(1px); } 100% { transform: rotate(-12deg) translateY(-2px); } }
 
-#players { grid-area: players; display: grid; grid-template-columns: repeat(var(--np, 4), minmax(0, 1fr)); gap: 6px; }
-.pcard { padding: 7px 8px 8px; position: relative; font-size: 12px; min-width: 0; border-top: 5px solid var(--pc, var(--paper-edge)); transition: transform 0.2s, box-shadow 0.2s; }
+/* 화면 가운데 주사위 연출 */
+.dice-stage { position: fixed; inset: 0; z-index: 70; pointer-events: none; background: radial-gradient(circle at var(--cx, 50%) var(--cy, 50%), rgba(20, 10, 4, 0.5), transparent 45%); opacity: 0; transition: opacity 0.2s; }
+.dice-stage.show { opacity: 1; }
+.dice-stage.leaving { background: transparent; transition: background 0.3s; }
+.dice-center { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.dice-pair { display: flex; gap: 18px; transform-origin: center; }
+.die.big { width: 84px; height: 84px; border-radius: 18px; padding: 12px; box-shadow: 0 6px 0 #c8b897, 0 16px 30px rgba(0, 0, 0, 0.45); }
+.die.big.red { box-shadow: 0 6px 0 #8d2a1f, 0 16px 30px rgba(0, 0, 0, 0.45); }
+.die.big i { width: 15px; height: 15px; }
+.dice-pair.tumbling .die { animation: dice-tumble 0.32s linear infinite; }
+.dice-pair.tumbling .die.red { animation-duration: 0.27s; animation-direction: reverse; }
+@keyframes dice-tumble {
+  0% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-26px) rotate(90deg); }
+  50% { transform: translateY(0) rotate(180deg); }
+  75% { transform: translateY(-14px) rotate(270deg); }
+  100% { transform: translateY(0) rotate(360deg); }
+}
+.dice-pair.landed .die { animation: dice-land 0.35s ease-out; }
+@keyframes dice-land { 0% { transform: scale(1.25); } 60% { transform: scale(0.94); } 100% { transform: scale(1); } }
+.dice-sum { font-family: var(--display); font-size: 40px; color: #fff; text-shadow: 0 3px 8px rgba(0, 0, 0, 0.6); opacity: 0; transform: scale(0.6); transition: opacity 0.2s, transform 0.25s; }
+.dice-sum.show { opacity: 1; transform: none; }
+.dice-sum.seven { color: #ffb3a6; }
+
+/* 플레이어 상태 카드 */
+#players { grid-area: players; display: grid; grid-template-columns: repeat(var(--np, 4), minmax(0, 1fr)); gap: 6px; align-content: start; }
+.pcard { padding: 7px 9px 6px; position: relative; font-size: 12px; min-width: 0; border-top: 5px solid var(--pc, var(--paper-edge)); transition: transform 0.2s, box-shadow 0.2s; }
 .pcard.current { transform: translateY(-2px); box-shadow: 0 0 0 3px var(--gold), var(--shadow); }
-.pcard .pname { display: flex; align-items: center; gap: 5px; font-weight: 700; font-size: 13px; white-space: nowrap; min-width: 0; }
-.pcard .pname .swatch { width: 14px; height: 14px; }
-.pcard .pname .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.pcard .vp { flex: none; margin-left: auto; font-family: var(--display); font-size: 15px; background: var(--ink); color: var(--gold); padding: 1px 8px; border-radius: 999px; }
-.pcard .stats { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: 5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.pcard .stats span { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
-.pcard .stats img { width: 16px; height: 16px; }
-.pcard .badges { display: flex; gap: 3px; margin-top: 4px; flex-wrap: wrap; }
+.pcard.winner { box-shadow: 0 0 0 3px var(--gold), 0 0 22px rgba(255, 216, 74, 0.7); }
+.avatar { width: 16px; height: 16px; flex: none; border-radius: 50%; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.25), inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35); }
+.pcard .ptop { display: flex; align-items: center; gap: 5px; font-weight: 700; font-size: 13.5px; white-space: nowrap; min-width: 0; }
+.pcard .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tag { flex: none; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: var(--paper-2); color: var(--muted); }
+.tag.me { background: var(--green); color: #fff; }
+.tag.off { background: #8d2a1f; color: #fff; }
+.pcard .vp { flex: none; margin-left: auto; font-family: var(--display); font-size: 18px; color: var(--ink); line-height: 1; }
+.pcard .vp small { font-size: 11px; color: var(--muted); margin-left: 1px; }
+.vpbar { position: relative; height: 5px; margin: 5px 0 6px; border-radius: 999px; background: var(--paper-2); overflow: hidden; }
+.vpbar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--pc, var(--gold)); border-radius: 999px; }
+.vpbar b { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(45deg, var(--pc), var(--pc) 3px, transparent 3px, transparent 6px); opacity: 0.6; }
+.pcard .stats { display: flex; flex-wrap: wrap; gap: 3px 9px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 500; }
+.stat { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.stat img { width: 17px; height: 17px; }
+.stat.warn { color: #fff; background: var(--accent); border-radius: 999px; padding: 0 6px 0 3px; }
+.stat.award { color: #4a3112; background: #ffe7a1; border-radius: 999px; padding: 0 6px 0 3px; box-shadow: inset 0 0 0 1px #e2b33c; }
+.pstatus { margin-top: 4px; font-size: 11.5px; color: var(--accent-dark); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 15px; }
+/* 주사위로 받은 자원: 카드 위에 잠깐 떠오른다 */
+.gains { position: absolute; right: 6px; bottom: -10px; display: flex; gap: 3px; z-index: 2; pointer-events: none; }
+.gain { display: inline-flex; align-items: center; gap: 1px; font-weight: 700; font-size: 12px; color: #1f5b14; background: #eaffd9; border: 1px solid #8fd06f; border-radius: 999px; padding: 1px 5px 1px 6px; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25); animation: gain-pop 3.2s ease-out forwards; }
+.gain img { width: 16px; height: 16px; }
+@keyframes gain-pop { 0% { opacity: 0; transform: translateY(8px) scale(0.8); } 10% { opacity: 1; transform: translateY(0) scale(1.08); } 18% { transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-6px); } }
 .badge { font-size: 11px; padding: 1px 7px; background: var(--accent); color: #fff; border-radius: 999px; }
 .badge.army { background: #6b4fb0; }
 .badge.ai { background: #7d8794; }
@@ -201,7 +264,7 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
 
 #side { grid-area: side; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 #hand { padding: 10px 12px 12px; }
-#hand h3, #log-box summary { margin: 0 0 8px; font-size: 16px; }
+#hand h3 { margin: 0 0 8px; font-size: 16px; }
 .hand-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 /* 자원 카드: 진짜 카드처럼 */
 .rcard {
@@ -238,12 +301,6 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
 #actions .btn { width: 100%; }
 #actions .wide { grid-column: span 2; }
 #actions .hand-note { color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); text-align: center; font-size: 14px; }
-
-#log-box { padding: 10px 12px; }
-#log-box summary { cursor: pointer; }
-#log { list-style: none; margin: 0; padding: 0; max-height: 170px; overflow-y: auto; font-size: 12.5px; display: flex; flex-direction: column-reverse; }
-#log li { padding: 4px 0; border-bottom: 1px dashed var(--paper-edge); display: flex; gap: 6px; line-height: 1.45; }
-#log li .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; margin-top: 5px; }
 
 /* 모달 */
 .modal { position: fixed; inset: 0; background: rgba(25, 14, 6, 0.6); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50; }
@@ -301,22 +358,36 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
   pointer-events: none;
 }
 
-/* 데스크톱 */
+/* 데스크톱: 보드는 왼쪽에 크게, 오른쪽 열에 차례 배너 → 플레이어 순위표 → 손패·행동 */
 @media (min-width: 960px) {
   #game-screen {
-    grid-template-columns: minmax(0, 1fr) 370px;
-    grid-template-rows: auto auto 1fr;
-    grid-template-areas: 'top top' 'players side' 'board side';
+    grid-template-columns: minmax(0, 1fr) 380px;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas: 'board top' 'board players' 'board side';
     height: 100vh;
-    gap: 8px 16px;
-    padding: 10px 18px;
+    height: 100dvh;
+    gap: 8px 18px;
+    padding: 12px 18px;
   }
+  #players { grid-template-columns: 1fr; gap: 7px; }
+  .pcard {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'top top' 'bar bar' 'stats status';
+    align-items: center;
+    border-top: none;
+    border-left: 6px solid var(--pc, var(--paper-edge));
+    padding: 7px 11px 7px;
+    font-size: 13px;
+  }
+  .pcard .ptop { grid-area: top; }
+  .pcard .vpbar { grid-area: bar; }
+  .pcard .stats { grid-area: stats; }
+  .pcard .pstatus { grid-area: status; margin: 0 0 0 8px; max-width: 150px; text-align: right; }
+  #actions { order: -1; }
+  .pcard.current { transform: translateX(-4px); }
   #side { overflow-y: auto; padding: 4px 4px 10px; }
-  /* 보드가 넘치더라도 위쪽 플레이어 카드를 덮지 않도록 위에서부터 배치 */
-  #board-wrap { justify-content: flex-start; }
-  #log-box { flex: 1; min-height: 120px; display: flex; flex-direction: column; }
-  #log-box[open] #log { flex: 1; max-height: 40vh; }
-  .pcard { font-size: 13px; }
+  #board-wrap { padding: 0; }
 }
 
 /* 가로로 긴 모바일: 보드가 왼쪽 열 높이를 전부 쓰고, 상단 바·플레이어·손패는 오른쪽 열에 */
@@ -331,8 +402,9 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
     padding: 6px max(10px, env(safe-area-inset-right)) 6px max(10px, env(safe-area-inset-left));
   }
   #players { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .pcard { padding: 5px 8px 6px; border-top-width: 4px; }
-  .pcard .badges { display: none; }
+  .pcard { padding: 5px 8px 5px; border-top-width: 4px; }
+  .pcard .tag:not(.me):not(.off) { display: none; }
+  .vpbar { margin: 3px 0 4px; }
   #side { overflow-y: auto; }
   /* 자주 누르는 버튼을 손패보다 위에 */
   #actions { order: -1; }
@@ -340,10 +412,21 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
   #prompt { margin-top: 4px; font-size: 14px; }
 }
 
-@media (max-width: 420px) {
-  .pcard { padding: 6px 6px 7px; }
-  .pcard .pname .swatch { display: none; }
-  .pcard .stats { gap: 1px 6px; }
+/* 좁은 세로 화면: 플레이어 4명이 한 줄에 들어가도록 줄인다 */
+@media (max-width: 600px) {
+  .pcard { padding: 6px 6px 5px; }
+  .pcard .ptop { font-size: 12.5px; gap: 4px; }
+  .pcard .ptop .avatar, .pcard .tag:not(.me):not(.off) { display: none; }
+  .pcard .vp { font-size: 16px; }
+  .pcard .vp small { display: none; }
+  .pcard .stats { gap: 1px 6px; font-size: 11.5px; }
+  .stat img { width: 14px; height: 14px; }
+  .pstatus { font-size: 10.5px; }
+  .gains { left: 3px; right: 3px; bottom: -12px; justify-content: flex-end; flex-wrap: wrap; }
+  .gain { font-size: 10.5px; padding: 0 4px 0 5px; }
+  .gain img { width: 13px; height: 13px; }
+  .turn-name { font-size: 17px; }
+  .turn-no { display: none; }
   .btn { font-size: 14px; }
 }
 

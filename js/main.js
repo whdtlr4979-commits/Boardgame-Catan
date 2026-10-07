@@ -8,6 +8,7 @@ import { BoardRenderer, LOGICAL_W, LOGICAL_H } from './render.js';
 import { iconURL, pieceColors, drawLogo as paintLogo } from './art.js';
 import { h, $ } from './dom.js';
 import { RULES_HTML } from './rules.js';
+import { dieEl, startRoll } from './dice.js';
 import { serverAvailable, createRoom, joinRoom, OnlineSession } from './net.js';
 
 const SAVE_KEY = 'pixel-catan-save-v1';
@@ -25,6 +26,13 @@ const app = {
   aiTimer: null,
   blink: true,
   rolling: false,
+  rollShow: null,
+  gainRollId: null,
+  gainChips: null,
+  gainTimer: null,
+  tickerKey: null,
+  tickerTimer: null,
+  viewChain: Promise.resolve(),
   modalOpen: false,
   prevHand: null,
   dialog: null,
@@ -201,6 +209,9 @@ function enterGame() {
   showScreen('game-screen');
   $('#players').style.setProperty('--np', S().players.length);
   if (humans().length === 1) app.viewer = humans()[0];
+  app.gainRollId = S().rollId ?? null;
+  app.gainChips = null;
+  app.tickerKey = null;
   layout();
   advance();
 }
@@ -296,12 +307,10 @@ function perform(p, action, animated = false) {
   if (action.type === 'rollDice' && !animated) {
     if (app.rolling || app.sending) return;
     app.rolling = true;
-    renderDice(true);
+    app.rollShow = startRoll({ speed: rollSpeed() });
+    renderDice();
     renderActions();
-    setTimeout(() => {
-      app.rolling = false;
-      perform(p, action, true);
-    }, 550);
+    setTimeout(() => perform(p, action, true), app.rollShow.tumbleMs);
     return;
   }
   if (app.net) {
@@ -318,6 +327,11 @@ function perform(p, action, animated = false) {
         console.warn('AI 행동 실패', action, err.message);
         if (s.phase === 'main') G().act(p, { type: 'endTurn' });
       } else {
+        if (app.rollShow) {
+          app.rollShow.cancel();
+          app.rollShow = null;
+        }
+        app.rolling = false;
         toast(err.message);
         refresh();
         return;
@@ -327,8 +341,25 @@ function perform(p, action, animated = false) {
     }
   }
   app.prevHand = before;
+  // 주사위는 가운데에서 결과를 보여 준 뒤 화면을 갱신한다
+  if (action.type === 'rollDice' && app.rollShow) {
+    const show = app.rollShow;
+    app.rollShow = null;
+    const dice = S().dice;
+    (dice ? show.land(dice) : Promise.resolve(show.cancel())).then(() => {
+      app.rolling = false;
+      afterAction(p, action);
+      advance();
+    });
+    return;
+  }
+  app.rolling = false;
   afterAction(p, action);
   advance();
+}
+
+function rollSpeed() {
+  return { slow: 1.3, normal: 1, fast: 0.6 }[app.prefs.speed] ?? 1;
 }
 
 function afterAction(p, action) {
@@ -348,12 +379,12 @@ function afterAction(p, action) {
 function refresh() {
   if (!app.game) return;
   renderTopbar();
-  renderDice(app.rolling);
+  renderDice();
+  renderTicker();
   renderPlayers();
   renderHand();
   renderActions();
   renderPrompt();
-  renderLog();
   renderBoard();
 }
 
@@ -378,59 +409,121 @@ function renderBoard() {
   app.renderer.render(S(), boardView());
 }
 
+function phaseLabel(s) {
+  switch (s.phase) {
+    case 'setup':
+      return `초기 배치 ${s.setup.index >= s.players.length ? 2 : 1}/2 · ${s.setup.step === 'settlement' ? '개척지' : '도로'}`;
+    case 'roll': return '주사위 굴리기';
+    case 'discard': return `카드 버리기 (${Object.keys(s.pendingDiscards).length}명)`;
+    case 'robber': return '도둑 옮기기';
+    case 'roadBuilding': return `무료 도로 (${s.freeRoads}개 남음)`;
+    case 'main': return '건설 · 교역';
+    case 'gameOver': return '게임 끝';
+    default: return '';
+  }
+}
+
 function renderTopbar() {
   const s = S();
-  const cur = s.players[s.current];
-  let text;
-  if (s.phase === 'gameOver') text = `${s.players[s.winner].name} 승리!`;
-  else if (s.phase === 'setup') text = `초기 배치 · ${cur.name}`;
-  else text = `${s.turn}턴 · ${cur.name}의 차례`;
-  $('#turn-info').textContent = text;
+  const el = $('#turn-info');
+  el.replaceChildren();
+  if (s.phase === 'gameOver') {
+    el.append(h('span', { class: 'avatar', style: { background: color(s.winner).main } }),
+      h('span', { class: 'turn-name' }, `${s.players[s.winner].name} 승리!`));
+    return;
+  }
+  const mine = s.current === app.viewer && !s.players[s.current].isAI;
+  el.append(
+    h('span', { class: 'avatar', style: { background: color(s.current).main } }),
+    h('span', { class: 'turn-name' }, mine ? '나의 차례' : `${s.players[s.current].name}의 차례`),
+    h('span', { class: 'phase-chip' }, phaseLabel(s)),
+    s.turn > 0 ? h('span', { class: 'turn-no' }, `${s.turn}턴`) : null,
+  );
 }
 
-const PIP_LAYOUT = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
-function dieEl(n, red, rolling) {
-  const d = h('div', { class: `die${red ? ' red' : ''}${rolling ? ' rolling' : ''}`, 'aria-label': `주사위 ${n}` });
-  for (let i = 0; i < 9; i++) d.append(h('i', { class: PIP_LAYOUT[n]?.includes(i) ? 'on' : '' }));
-  return d;
+// 방금 일어난 일 하나만 잠깐 보여 준다 (지난 기록은 남기지 않는다)
+function renderTicker() {
+  const s = S();
+  const el = $('#ticker');
+  const last = s.log[s.log.length - 1];
+  if (!last || app.rolling) return;
+  const key = last.seq ?? `${s.log.length}:${last.text}`;
+  if (key === app.tickerKey) return;
+  app.tickerKey = key;
+  el.replaceChildren(
+    h('span', { class: 'dot', style: { background: last.player !== null ? color(last.player).main : 'transparent' } }),
+    h('span', { class: 'txt' }, last.text));
+  el.classList.remove('show');
+  void el.offsetWidth; // 애니메이션 다시 시작
+  el.classList.add('show');
+  clearTimeout(app.tickerTimer);
+  app.tickerTimer = setTimeout(() => el.classList.remove('show'), 5000);
 }
 
-function renderDice(rolling) {
+function renderDice() {
   const el = $('#dice');
   const s = S();
   el.replaceChildren();
-  if (rolling) {
-    el.append(dieEl(1 + Math.floor(Math.random() * 6), false, true), dieEl(1 + Math.floor(Math.random() * 6), true, true));
-  } else if (s.dice) {
-    el.append(dieEl(s.dice[0], false, false), dieEl(s.dice[1], true, false));
-  }
+  // 굴리는 동안에는 주사위가 화면 가운데에 있다
+  if (!app.rolling && s.dice) el.append(dieEl(s.dice[0], false), dieEl(s.dice[1], true));
+}
+
+// 주사위로 받은 자원을 플레이어 칸에 잠깐 띄운다 (생산은 모두에게 공개되는 정보)
+function updateGainChips() {
+  const s = S();
+  if (app.rolling || !s.rollId || s.rollId === app.gainRollId) return;
+  app.gainRollId = s.rollId;
+  if (!s.lastProduction) return;
+  app.gainChips = s.lastProduction;
+  clearTimeout(app.gainTimer);
+  app.gainTimer = setTimeout(() => {
+    app.gainChips = null;
+    if (app.game) renderPlayers();
+  }, 3200);
+}
+
+function statEl(icon, value, title, cls = '') {
+  return h('span', { class: `stat ${cls}`, title }, h('img', { src: icon, alt: '' }), value);
 }
 
 function renderPlayers() {
   const s = S();
   const g = G();
+  updateGainChips();
   const wrap = $('#players');
   wrap.replaceChildren();
   s.players.forEach((pl, i) => {
     const pub = g.victoryPoints(i, { includeHidden: false });
     const all = g.victoryPoints(i);
     const showHidden = (i === app.viewer || s.phase === 'gameOver') && all > pub;
-    const card = h('div', { class: `pcard panel${i === s.current ? ' current' : ''}` },
-      h('div', { class: 'pname' },
-        h('span', { class: 'swatch', style: { background: color(i).main } }),
+    const cards = handTotal(pl.resources);
+    const current = i === s.current && s.phase !== 'gameOver';
+    const lr = s.longestRoad.holder === i;
+    const la = s.largestArmy.holder === i;
+    let status = '';
+    if (s.pendingDiscards?.[i]) status = `카드 ${s.pendingDiscards[i]}장 버리는 중`;
+    else if (current) status = pl.isAI ? `${phaseLabel(s)} · 생각 중` : phaseLabel(s);
+    else if (s.winner === i) status = '승리!';
+    const gains = app.gainChips?.[i];
+    const gainEls = gains ? RESOURCES.filter((r) => gains[r] > 0).map((r) => h('span', { class: 'gain' }, `+${gains[r]}`, resIcon(r, 16))) : [];
+    const card = h('div', { class: `pcard panel${current ? ' current' : ''}${s.winner === i ? ' winner' : ''}` },
+      h('div', { class: 'ptop' },
+        h('span', { class: 'avatar', style: { background: color(i).main } }),
         h('span', { class: 'nm' }, pl.name),
-        h('span', { class: 'vp', title: '승리 점수' }, showHidden ? `${pub}+${all - pub}` : `${pub}`)),
+        app.viewer === i && (app.net || humans().length > 1) ? h('span', { class: 'tag me' }, '나') : null,
+        pl.isAI ? h('span', { class: 'tag' }, 'AI') : null,
+        app.net && !pl.isAI && app.room?.seats[i]?.online === false ? h('span', { class: 'tag off' }, '접속 끊김') : null,
+        h('span', { class: 'vp', title: '승리 점수' }, showHidden ? `${pub}+${all - pub}` : `${pub}`, h('small', {}, `/${WIN_POINTS}`))),
+      h('div', { class: 'vpbar', title: `${pub} / ${WIN_POINTS}점` },
+        h('i', { style: { width: `${Math.min(100, (pub / WIN_POINTS) * 100)}%` } }),
+        showHidden ? h('b', { style: { left: `${(pub / WIN_POINTS) * 100}%`, width: `${Math.min(100 - (pub / WIN_POINTS) * 100, ((all - pub) / WIN_POINTS) * 100)}%` } }) : null),
       h('div', { class: 'stats' },
-        h('span', { title: '자원 카드' }, h('img', { class: 'px', src: iconURL('cards'), alt: '' }), handTotal(pl.resources)),
-        h('span', { title: '발전 카드' }, h('img', { class: 'px', src: iconURL('devBack'), alt: '' }), pl.devCards.length),
-        h('span', { title: '사용한 기사' }, h('img', { class: 'px', src: iconURL('knight'), alt: '' }), pl.knights),
-        h('span', { title: '가장 긴 도로' }, h('img', { class: 'px', src: iconURL('roadBuilding', { m: color(i).main }), alt: '' }), s.longestRoad.lengths[i] ?? 0)),
-      h('div', { class: 'badges' },
-        s.longestRoad.holder === i ? h('span', { class: 'badge' }, '최장 교역로') : null,
-        s.largestArmy.holder === i ? h('span', { class: 'badge army' }, '최강 기사단') : null,
-        pl.isAI ? h('span', { class: 'badge ai' }, 'AI') : null,
-        app.net && !pl.isAI && app.room?.seats[i]?.online === false ? h('span', { class: 'badge off' }, '접속 끊김') : null,
-        app.net && i === app.viewer ? h('span', { class: 'badge army' }, '나') : null));
+        statEl(iconURL('cards'), cards, cards > 7 ? '자원 카드 (8장 이상: 7이 나오면 절반을 버려야 해요)' : '자원 카드', cards > 7 ? 'warn' : ''),
+        statEl(iconURL('devBack'), pl.devCards.length, '발전 카드'),
+        statEl(iconURL('knight'), pl.knights, la ? '사용한 기사 · 최강 기사단 (+2점)' : '사용한 기사', la ? 'award' : ''),
+        statEl(iconURL('roadBuilding', { m: color(i).main }), s.longestRoad.lengths[i] ?? 0, lr ? '가장 긴 도로 · 최장 교역로 (+2점)' : '가장 긴 도로', lr ? 'award' : '')),
+      h('div', { class: 'pstatus' }, status || '\u00a0'),
+      gainEls.length ? h('div', { class: 'gains' }, gainEls) : null);
     card.style.setProperty('--pc', color(i).main);
     wrap.append(card);
   });
@@ -577,17 +670,6 @@ function renderPrompt() {
   }
   if (s.phase === 'roadBuilding') {
     el.append(h('button', { class: 'btn small cancel', onclick: () => perform(s.current, { type: 'endRoadBuilding' }) }, '그만 놓기'));
-  }
-}
-
-function renderLog() {
-  const el = $('#log');
-  el.replaceChildren();
-  const log = S().log.slice(-80);
-  for (const entry of log) {
-    el.prepend(h('li', {},
-      h('span', { class: 'dot', style: { background: entry.player !== null ? color(entry.player).main : 'transparent', borderColor: entry.player !== null ? '#120c08' : 'transparent' } }),
-      h('span', {}, entry.text)));
   }
 }
 
@@ -1056,6 +1138,11 @@ function sendOnline(action) {
     .catch((err) => {
       app.justRolled = false;
       app.discardSent = null;
+      if (app.rollShow) {
+        app.rollShow.cancel();
+        app.rollShow = null;
+        app.rolling = false;
+      }
       toast(err.message);
       onlineAdvance();
     })
@@ -1100,7 +1187,30 @@ function leaveOnline({ forget = false, message } = {}) {
   if (message) toast(message, 2600);
 }
 
+// 서버에서 온 화면 상태는 순서대로 처리한다 (주사위 연출이 끝날 때까지 다음 상태를 기다림)
 function onView(view) {
+  app.viewChain = app.viewChain.then(() => handleView(view)).catch((err) => console.error(err));
+}
+
+async function handleView(view) {
+  if (app.net && view.started && app.game && app.seen && view.state?.rollId !== app.seen.roll && view.state?.dice) {
+    let show = app.rollShow;
+    app.rollShow = null;
+    if (!show) {
+      app.rolling = true;
+      show = startRoll();
+      renderDice();
+      renderActions();
+      await new Promise((r) => setTimeout(r, show.tumbleMs));
+    }
+    await show.land(view.state.dice);
+    app.rolling = false;
+  }
+  applyView(view);
+}
+
+function applyView(view) {
+  if (!app.net) return;
   if (view.removed || view.closed) {
     leaveOnline({ forget: true, message: view.closed ? '방장이 방을 닫았습니다.' : '방에서 나왔습니다.' });
     return;
@@ -1133,19 +1243,8 @@ function onlineEvents(prev, s) {
   if (prev) app.prevHand = { ...prev.players[me].resources };
   if (s.rollId !== app.seen.roll) {
     app.seen.roll = s.rollId;
-    const seven = s.dice && s.dice[0] + s.dice[1] === 7;
-    if (app.justRolled) {
-      app.justRolled = false;
-      if (seven) toast('7! 도둑이 나타났습니다!');
-    } else {
-      app.rolling = true;
-      renderDice(true);
-      setTimeout(() => {
-        app.rolling = false;
-        refresh();
-        if (seven) toast('7! 도둑이 나타났습니다!');
-      }, 500);
-    }
+    app.justRolled = false;
+    if (s.dice && s.dice[0] + s.dice[1] === 7) toast('7! 도둑이 나타났습니다!');
   }
   if (s.lastSteal && s.lastSteal.id !== app.seen.steal) {
     app.seen.steal = s.lastSteal.id;
