@@ -1,6 +1,6 @@
 // 화면과 게임 진행을 연결하는 컨트롤러
 import {
-  RESOURCES, RESOURCE_NAMES, COSTS, DEV_NAMES, DEV_DESCRIPTIONS, PLAYER_COLORS, WIN_POINTS,
+  RESOURCES, RESOURCE_NAMES, COSTS, DEV_NAMES, DEV_DESCRIPTIONS, PLAYER_COLORS, WIN_POINTS, PIECE_LIMITS,
 } from './constants.js';
 import { Game, RuleError, handTotal } from './game.js';
 import { chooseAction, respondToTrade } from './ai.js';
@@ -437,8 +437,8 @@ function renderTopbar() {
     h('span', { class: 'avatar', style: { background: color(s.current).main } }),
     h('span', { class: 'turn-name' }, mine ? '나의 차례' : `${s.players[s.current].name}의 차례`),
     h('span', { class: 'phase-chip' }, phaseLabel(s)),
-    s.turn > 0 ? h('span', { class: 'turn-no' }, `${s.turn}턴`) : null,
   );
+  if (s.turn > 0) el.append(h('span', { class: 'turn-no' }, `${s.turn}턴`));
 }
 
 // 방금 일어난 일 하나만 잠깐 보여 준다 (지난 기록은 남기지 않는다)
@@ -482,8 +482,12 @@ function updateGainChips() {
   }, 3200);
 }
 
-function statEl(icon, value, title, cls = '') {
-  return h('span', { class: `stat ${cls}`, title }, h('img', { src: icon, alt: '' }), value);
+// 플레이어 카드의 상태 칸: 큰 아이콘과 숫자, 아래에 이름표
+function statEl(icon, value, label, title, cls = '', extra = null) {
+  return h('div', { class: `stat ${cls}`, title, 'aria-label': `${title}: ${value}` },
+    h('span', { class: 'sv' }, h('img', { src: icon, alt: '' }), h('b', {}, value)),
+    h('small', {}, label),
+    extra);
 }
 
 function renderPlayers() {
@@ -518,11 +522,11 @@ function renderPlayers() {
         h('i', { style: { width: `${Math.min(100, (pub / WIN_POINTS) * 100)}%` } }),
         showHidden ? h('b', { style: { left: `${(pub / WIN_POINTS) * 100}%`, width: `${Math.min(100 - (pub / WIN_POINTS) * 100, ((all - pub) / WIN_POINTS) * 100)}%` } }) : null),
       h('div', { class: 'stats' },
-        statEl(iconURL('cards'), cards, cards > 7 ? '자원 카드 (8장 이상: 7이 나오면 절반을 버려야 해요)' : '자원 카드', cards > 7 ? 'warn' : ''),
-        statEl(iconURL('devBack'), pl.devCards.length, '발전 카드'),
-        statEl(iconURL('knight'), pl.knights, la ? '사용한 기사 · 최강 기사단 (+2점)' : '사용한 기사', la ? 'award' : ''),
-        statEl(iconURL('roadBuilding', { m: color(i).main }), s.longestRoad.lengths[i] ?? 0, lr ? '가장 긴 도로 · 최장 교역로 (+2점)' : '가장 긴 도로', lr ? 'award' : '')),
-      h('div', { class: 'pstatus' }, status || '\u00a0'),
+        statEl(iconURL('cards'), cards, '자원', cards > 7 ? '자원 카드 (8장 이상: 7이 나오면 절반을 버려야 해요)' : '자원 카드', cards > 7 ? 'warn' : '', cards > 7 ? h('span', { class: 'plus alert' }, '!') : null),
+        statEl(iconURL('devBack'), pl.devCards.length, '발전', '발전 카드'),
+        statEl(iconURL('knight'), pl.knights, '기사', la ? '사용한 기사 · 최강 기사단 (+2점)' : '사용한 기사', la ? 'award' : '', la ? h('span', { class: 'plus' }, '+2') : null),
+        statEl(iconURL('roadBuilding', { m: color(i).main }), s.longestRoad.lengths[i] ?? 0, '도로', lr ? '가장 긴 도로 · 최장 교역로 (+2점)' : '가장 긴 도로', lr ? 'award' : '', lr ? h('span', { class: 'plus' }, '+2') : null)),
+      h('div', { class: `pstatus${status ? '' : ' empty'}` }, status || '\u00a0'),
       gainEls.length ? h('div', { class: 'gains' }, gainEls) : null);
     card.style.setProperty('--pc', color(i).main);
     wrap.append(card);
@@ -568,7 +572,24 @@ function renderHand() {
     const ratio = G().tradeRatio(v, r);
     if (ratio < 4) ports.push(`${RESOURCE_NAMES[r]} ${ratio}:1`);
   }
-  el.append(h('div', { class: 'hand-note' }, `남은 말: 도로 ${pl.roadsLeft} · 개척지 ${pl.settlementsLeft} · 도시 ${pl.citiesLeft}${ports.length ? ` · 항구: ${ports.join(', ')}` : ''}`));
+  el.append(renderSupply(pl, color(v)));
+  if (ports.length) el.append(h('div', { class: 'hand-note' }, `항구: ${ports.join(', ')}`));
+}
+
+// 남은 말: 아직 놓지 않은 말은 진하게, 이미 놓은 말은 흐린 자국으로 보여 준다
+function renderSupply(pl, c) {
+  const colors = pieceColors(c);
+  const groups = [
+    ['settlement', '개척지', pl.settlementsLeft, PIECE_LIMITS.settlement],
+    ['city', '도시', pl.citiesLeft, PIECE_LIMITS.city],
+    ['road', '도로', pl.roadsLeft, PIECE_LIMITS.road],
+  ];
+  return h('div', { class: 'supply' },
+    h('div', { class: 'supply-title' }, '남은 말'),
+    groups.map(([type, name, left, max]) => h('div', { class: `supply-row ${type}`, title: `${name} ${left}개 남음 (전체 ${max}개)` },
+      h('span', { class: 'supply-name' }, name, h('b', {}, left)),
+      h('span', { class: 'pieces', 'aria-label': `${name} ${left}개 남음` },
+        Array.from({ length: max }, (_, n) => h('img', { class: n < left ? 'piece' : 'piece used', src: iconURL(type, colors), alt: '' }))))));
 }
 
 function actionButton(label, { onclick, disabled, cls = '', cost, icon, title } = {}) {
@@ -1458,8 +1479,8 @@ async function setupOnlineStart() {
 }
 
 // ---------- 레이아웃 ----------
-// 보드 바깥 여백: 캔버스 margin(10px) + 나무 테두리(9px)
-const BOARD_FRAME = 19;
+// 보드 바깥 여백: 캔버스 margin(4px)
+const BOARD_FRAME = 4;
 
 function layout() {
   if (!app.renderer || $('#game-screen').classList.contains('hidden')) return;
