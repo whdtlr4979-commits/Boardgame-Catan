@@ -68,6 +68,10 @@ test('상대 손패와 발전 카드는 가려진다', () => {
   assert.ok(v0.state.players[1].resources.hidden >= 3);
   assert.deepEqual(v0.state.players[1].devCards.map((c) => c.type), ['hidden']);
   assert.ok(v0.state.devDeck.every((c) => c === 'hidden'));
+  // 지난 기록은 보내지 않고 방금 일어난 일 하나만 보낸다
+  assert.ok(room.game.state.log.length > 1);
+  assert.equal(v0.state.log.length, 1);
+  assert.deepEqual(v0.state.log[0], room.game.state.log.at(-1));
   const v1 = room.view(1);
   assert.equal(v1.state.players[1].resources.ore, s.players[1].resources.ore);
   assert.equal(v1.state.players[1].devCards[0].type, 'victoryPoint');
