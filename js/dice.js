@@ -1,4 +1,5 @@
 // 주사위 연출: 화면 가운데에서 굴리고 → 결과를 보여 주고 → 위쪽 주사위 자리로 날려 보낸다
+// 기기의 '애니메이션 줄이기' 설정과 상관없이 항상 보여 준다.
 import { h } from './dom.js';
 
 const PIP_LAYOUT = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
@@ -14,7 +15,6 @@ function setFace(die, n) {
   die.setAttribute('aria-label', `주사위 ${n}`);
 }
 
-const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 굴리기 시작. land(값)로 결과를 정하면 보여 준 뒤 날려 보내고 끝난다.
@@ -55,7 +55,7 @@ export function startRoll({ speed = 1, target = '#dice', over = '#board' } = {})
 
   return {
     // 최소 굴림 시간 (호출하는 쪽에서 기다린다)
-    tumbleMs: reducedMotion() ? 0 : Math.round(650 * speed),
+    tumbleMs: Math.round(650 * speed),
     async land(values) {
       if (done) return;
       clearInterval(timer);
@@ -67,11 +67,11 @@ export function startRoll({ speed = 1, target = '#dice', over = '#board' } = {})
       sum.textContent = total === 7 ? '7 · 도둑!' : String(total);
       sum.classList.toggle('seven', total === 7);
       sum.classList.add('show');
-      await wait(reducedMotion() ? 500 : Math.round(750 * speed));
+      await wait(Math.round(750 * speed));
       if (done) return;
       const dest = document.querySelector(target)?.getBoundingClientRect();
       const from = pair.getBoundingClientRect();
-      if (!reducedMotion() && dest && dest.width > 0) {
+      if (dest && dest.width > 0) {
         const dx = dest.left + dest.width / 2 - (from.left + from.width / 2);
         const dy = dest.top + dest.height / 2 - (from.top + from.height / 2);
         const scale = Math.max(0.2, dest.height / from.height);
