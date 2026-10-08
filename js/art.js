@@ -686,13 +686,13 @@ const ICON_DRAW = {
     }
   },
   dice(ctx) {
-    roundRect(ctx, 3.5, 3.5, 17, 17, 3.5);
-    ctx.fillStyle = '#fffdf8';
+    roundRect(ctx, 3.5, 3.5, 17, 17, 4.5);
+    ctx.fillStyle = '#f2c12e';
     ctx.fill();
-    ctx.strokeStyle = '#b9ab95';
+    ctx.strokeStyle = '#b8861a';
     ctx.lineWidth = 1;
     ctx.stroke();
-    for (const [x, y] of [[8, 8], [12, 12], [16, 16]]) ellipse(ctx, x, y, 1.6, 1.6, '#3b2a1e');
+    for (const [x, y] of [[8, 8], [12, 12], [16, 16]]) ellipse(ctx, x, y, 1.6, 1.6, '#c4241c');
   },
   settlement(ctx, colors) {
     ctx.save();
