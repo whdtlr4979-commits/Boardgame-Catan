@@ -1,4 +1,5 @@
 // 보드게임 일러스트 스타일 그림 도구: 지형 장식, 말, 아이콘 (모두 벡터로 그린다)
+import { pieceSprite, spriteIcon } from './pieces3d.js';
 
 export const RES_COLORS = {
   wood: '#3f7d3a',
@@ -723,6 +724,15 @@ const iconCache = new Map();
 export function iconURL(name, colors) {
   const key = name + JSON.stringify(colors || {});
   if (iconCache.has(key)) return iconCache.get(key);
+  // 개척지·도시·도로 아이콘은 보드와 같은 조각 말 그림을 쓴다 (WebGL이 없으면 아래 2D 그림)
+  if (['settlement', 'city', 'road'].includes(name)) {
+    const spr = pieceSprite(name, colors?.m || '#c0392b', name === 'road' ? -Math.PI / 2 : 0);
+    if (spr) {
+      const url = spriteIcon(spr);
+      iconCache.set(key, url);
+      return url;
+    }
+  }
   const draw = ICON_DRAW[name];
   if (!draw) return '';
   const size = 96;

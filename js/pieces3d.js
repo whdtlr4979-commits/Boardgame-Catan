@@ -383,7 +383,79 @@ export function roadYawFor(screenAngle) {
   return -a - VIEW.yaw;
 }
 
-// 색 하나에 대한 말 그림 묶음
+// 도로를 화면 각도 angle로 보였을 때 길이가 얼마나 짧아 보이는지 (1 = 그대로)
+export function roadLength(screenAngle) {
+  const se = Math.sin(VIEW.elevation);
+  return 1 / Math.sqrt(Math.cos(screenAngle) ** 2 + (Math.sin(screenAngle) / se) ** 2);
+}
+
+// ---------- 게임에서 쓰는 그림 캐시 ----------
+// 모양은 한 번만 만들고, 색·방향별 그림은 처음 필요할 때 그려 둔다.
+const SHAPES = {};
+const shape = (name, make) => (SHAPES[name] ||= make());
+const sprites = new Map();
+let usable = null;
+
+// type: 'settlement' | 'city' | 'road' | 'robber'. WebGL을 못 쓰면 null (예전 2D 그림을 쓴다)
+export function pieceSprite(type, colorHex = '#888888', screenAngle = 0) {
+  if (usable === null) usable = webglAvailable();
+  if (!usable) return null;
+  // 도로는 앞뒤가 같으므로 각도를 -90°~90°로 맞춘다
+  let angle = screenAngle;
+  if (type === 'road') {
+    while (angle > Math.PI / 2) angle -= Math.PI;
+    while (angle <= -Math.PI / 2) angle += Math.PI;
+  }
+  const key = type === 'robber' ? 'robber' : `${type}|${colorHex}|${type === 'road' ? Math.round(angle * 100) : ''}`;
+  if (!sprites.has(key)) {
+    let spr = null;
+    try {
+      if (type === 'robber') spr = bake(shape('robber', ROBBER), '#3a3a40', { gloss: 0.35 });
+      else if (type === 'road') spr = bake(shape('road', ROAD), colorHex, { yawExtra: roadYawFor(angle) });
+      else if (type === 'city') spr = bake(shape('city', CITY), colorHex);
+      else spr = bake(shape('settlement', SETTLEMENT), colorHex);
+    } catch (err) {
+      console.warn('말 그림 준비 실패', err);
+      usable = false;
+      return null;
+    }
+    if (spr && type === 'road') spr.length = roadLength(angle);
+    sprites.set(key, spr);
+  }
+  return sprites.get(key);
+}
+
+// 그림을 (x, y)에 바닥 중심을 맞춰 붙인다. unit: 모양 1단위가 차지할 크기
+export function drawSprite(ctx, spr, x, y, unit) {
+  const k = unit / spr.unitPx;
+  const size = spr.size * k;
+  ctx.drawImage(spr.canvas, x - spr.anchor[0] * size, y - spr.anchor[1] * size, size, size);
+}
+
+// 아이콘용: 그림에서 말이 있는 부분만 정사각형으로 잘라 낸다
+export function spriteIcon(spr, out = 96) {
+  const c = spr.canvas;
+  const data = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  let x0 = c.width; let y0 = c.height; let x1 = 0; let y1 = 0;
+  for (let y = 0; y < c.height; y++) {
+    for (let x = 0; x < c.width; x++) {
+      if (data[(y * c.width + x) * 4 + 3] > 140) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+  }
+  const side = Math.max(x1 - x0, y1 - y0) + 8;
+  const icon = document.createElement('canvas');
+  icon.width = out;
+  icon.height = out;
+  icon.getContext('2d').drawImage(c, (x0 + x1) / 2 - side / 2, (y0 + y1) / 2 - side / 2, side, side, 0, 0, out, out);
+  return icon.toDataURL();
+}
+
+// 색 하나에 대한 말 그림 묶음 (미리보기용)
 export function bakePieces(colorHex) {
   return {
     settlement: bake(SETTLEMENT(), colorHex),
