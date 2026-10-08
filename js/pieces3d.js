@@ -1,6 +1,6 @@
 // 카탄 특별판의 조각된 플라스틱 말을 WebGL로 한 번 입체로 그려 그림(스프라이트)으로 만들어 둔다.
 // 마을(개척지): 울퉁불퉁한 언덕 위 집 두 채 / 도시: 둥근 받침 위 교회와 집들 /
-// 도로: 길쭉하고 울퉁불퉁한 둑 / 도둑: 나란히 선 도적 세 명.
+// 도로: 포장 돌 깐 길과 양옆 연석 / 도둑: 나란히 선 도적 세 명.
 // 보드는 이 그림을 붙여 그리기만 하므로 매 프레임 비용이 거의 없다.
 
 const norm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
@@ -180,18 +180,74 @@ function CITY() {
   return out;
 }
 
-// 도로: 길쭉하고 울퉁불퉁한 둑 (윗면에 돌·풀 같은 마디)
+// 도로: 끝이 둥근 납작한 길바닥 위에 네모 포장 돌을 엇갈려 깔고, 양옆에 연석을 둔다
 function ROAD() {
-  const L = 1.8; const R = 0.22;
-  return surface(36, 20, (u, v) => {
-    const x = (u - 0.5) * L;
-    const t = v * Math.PI * 2;
-    const end = Math.sqrt(Math.max(0, 1 - ((u - 0.5) * 2) ** 8));
-    const lump = 1 + 0.12 * Math.sin(u * 23) * Math.sin(t * 3 + u * 7) + 0.06 * Math.sin(u * 47 + t);
-    const r = R * end * lump;
-    const y = Math.max(0, r * 0.78 * Math.sin(t));
-    return [x, y, r * Math.cos(t)];
-  }, { wrapV: true, flip: true, shade: (u, v) => 0.85 + 0.15 * Math.sin(v * Math.PI) });
+  const L = 1.84; const W = 0.46; const H = 0.1;
+  const out = [];
+  // 길바닥: 끝이 둥근 판 (옆면은 조금 어둡게, 윗면은 자갈 사이 틈이라 더 어둡게)
+  const half = L / 2 - W / 2;
+  const outline = (t) => {
+    // 둘레를 따라 0~1: 오른쪽 반원 → 위쪽 직선 → 왼쪽 반원 → 아래쪽 직선
+    const per = 2 * Math.PI * (W / 2) + 4 * half;
+    let d = t * per;
+    const arc = Math.PI * (W / 2);
+    if (d < arc) { const a = -Math.PI / 2 + d / (W / 2); return [half + (W / 2) * Math.cos(a), (W / 2) * Math.sin(a)]; }
+    d -= arc;
+    if (d < 2 * half) return [half - d, W / 2];
+    d -= 2 * half;
+    if (d < arc) { const a = Math.PI / 2 + d / (W / 2); return [-half + (W / 2) * Math.cos(a), (W / 2) * Math.sin(a)]; }
+    d -= arc;
+    return [-half + d, -W / 2];
+  };
+  // 옆면: 아래는 바닥, 위 가장자리는 살짝 둥글게
+  out.push(...surface(4, 64, (u, v) => {
+    const [x, z] = outline(v);
+    const inset = u < 0.75 ? 0 : (u - 0.75) * 0.12;
+    const k = 1 - inset / (W / 2);
+    return [x * (1 - inset / L), Math.min(u, 0.75) / 0.75 * H * 0.9 + (u > 0.75 ? (u - 0.75) * 4 * H * 0.1 : 0), z * k];
+  }, { wrapV: true, flip: true, shade: () => 0.82 }));
+  // 윗면 (자갈 사이로 보이는 바닥)
+  out.push(...surface(1, 64, (u, v) => {
+    const [x, z] = outline(v);
+    const k = u === 0 ? 0 : 0.97;
+    return [x * k, H, z * k];
+  }, { wrapV: true, shade: () => 0.5 }));
+  // 포장 돌: 두 줄로 엇갈려 깐 납작한 네모 돌 (모서리를 깎아 틈이 보이게)
+  const slab = (cx, cz, w, d) => {
+    const h = 0.03; const bev = 0.012; const y0 = H - 0.005;
+    const tw = w / 2 - bev; const td = d / 2 - bev;
+    const P = (x, y, z) => [cx + x, y0 + y, cz + z];
+    const top = [P(-tw, h, td), P(tw, h, td), P(tw, h, -td), P(-tw, h, -td)];
+    const bot = [P(-w / 2, 0, d / 2), P(w / 2, 0, d / 2), P(w / 2, 0, -d / 2), P(-w / 2, 0, -d / 2)];
+    const tris = [...quad(top[0], top[1], top[2], top[3])];
+    for (let i = 0; i < 4; i++) tris.push(...quad(bot[i], bot[(i + 1) % 4], top[(i + 1) % 4], top[i]));
+    return flat(tris, 1);
+  };
+  const lane = (W - 0.16) / 2;
+  [-lane / 2, lane / 2].forEach((z, ri) => {
+    const len = 0.2;
+    for (let x = -half - 0.08 + (ri ? len / 2 : 0); x < half + 0.1; x += len) {
+      const x0 = Math.max(x, -half - 0.1);
+      const x1 = Math.min(x + len, half + 0.1);
+      if (x1 - x0 < 0.06) continue;
+      // 둥근 끝 안쪽으로 들어가도록 끝 쪽 돌은 폭을 줄인다
+      const edge = Math.max(0, Math.abs((x0 + x1) / 2) - half);
+      const w = lane - 0.02 - edge * 0.9;
+      if (w < 0.05) continue;
+      out.push(...slab((x0 + x1) / 2, z, x1 - x0 - 0.022, w));
+    }
+  });
+  // 양옆 돌 턱: 길보다 확실히 높은 연석
+  for (const side of [-1, 1]) {
+    out.push(...surface(28, 10, (u, v) => {
+      const x = (u - 0.5) * (2 * half + 0.1);
+      const t = v * Math.PI;
+      const lump = 1 + 0.1 * Math.sin(u * 41 + side) * Math.sin(u * 13);
+      const r = 0.055 * lump;
+      return [x, H + r * 1.3 * Math.sin(t), side * (W / 2 - 0.045) + r * 0.8 * Math.cos(t)];
+    }, { flip: side > 0, shade: () => 1 }));
+  }
+  return out;
 }
 
 // 도둑: 모자 쓴 도적 세 명이 모여 선 조각
