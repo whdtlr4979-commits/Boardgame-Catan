@@ -570,7 +570,7 @@ function renderHand() {
   for (const [key, n] of Object.entries(counts)) {
     const [type, isNew] = key.split('_');
     devs.append(h('span', { class: `dcard${isNew ? ' new' : ''}`, title: DEV_DESCRIPTIONS[type] },
-      h('img', { class: 'px', src: iconURL(type), alt: '' }), `${DEV_NAMES[type]}${n > 1 ? ` ×${n}` : ''}${isNew ? ' (새 카드)' : ''}`));
+      h('img', { class: 'px', src: iconURL(type), alt: '' }), `${DEV_NAMES[type]}${n > 1 ? ` ×${n}` : ''}`, isNew ? h('span', { class: 'new-tag' }, ' (새 카드)') : null));
   }
   el.append(devs);
   const ports = [];
@@ -1493,8 +1493,8 @@ const BOARD_FRAME = 4;
 function layout() {
   if (!app.renderer || $('#game-screen').classList.contains('hidden')) return;
   const wrap = $('#board-wrap');
-  const desktop = window.matchMedia('(min-width: 960px)').matches;
-  const landscapePhone = window.matchMedia('(max-width: 959px) and (orientation: landscape) and (max-height: 520px)').matches;
+  const desktop = window.matchMedia('(min-width: 960px) and (min-height: 521px)').matches;
+  const landscapePhone = window.matchMedia('(orientation: landscape) and (max-height: 520px)').matches;
   const availW = wrap.clientWidth - BOARD_FRAME * 2;
   let availH;
   if (desktop || landscapePhone) {
