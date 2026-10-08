@@ -538,6 +538,8 @@ function renderHand() {
   el.replaceChildren();
   const s = S();
   const v = app.viewer;
+  const supplyPanel = $('#supply-panel');
+  supplyPanel.replaceChildren();
   if (v === null || v === undefined) {
     el.append(h('h3', {}, '손패'), h('p', { class: 'hand-note' }, humans().length ? '다음 플레이어를 기다리는 중…' : '관전 모드'));
     return;
@@ -572,7 +574,9 @@ function renderHand() {
     const ratio = G().tradeRatio(v, r);
     if (ratio < 4) ports.push(`${RESOURCE_NAMES[r]} ${ratio}:1`);
   }
+  // 좁은 화면은 손패 안에, 넓은 PC 화면은 플레이어 상태 아래 칸에 보인다 (CSS가 하나만 보여 준다)
   el.append(renderSupply(pl, color(v)));
+  supplyPanel.append(renderSupply(pl, color(v)));
   if (ports.length) el.append(h('div', { class: 'hand-note' }, `항구: ${ports.join(', ')}`));
 }
 
@@ -594,7 +598,7 @@ function renderSupply(pl, c) {
 
 function actionButton(label, { onclick, disabled, cls = '', cost, icon, title } = {}) {
   return h('button', { type: 'button', class: `btn ${cls}`, onclick, disabled, title },
-    icon ? h('img', { class: 'px', src: icon, alt: '' }) : null, label, cost ? costIcons(cost) : null);
+    icon ? h('img', { class: 'px', src: icon, alt: '' }) : null, h('span', { class: 'lbl' }, label), cost ? costIcons(cost) : null);
 }
 
 function renderActions() {
