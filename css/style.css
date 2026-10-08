@@ -194,29 +194,37 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
 .die.red { background: linear-gradient(145deg, #e66b55, #c0392b); box-shadow: 0 3px 0 #8d2a1f, 0 5px 10px rgba(0, 0, 0, 0.35); }
 .die.red i { background: #fff6e8; }
 
-/* 화면 가운데 주사위 연출 */
-.dice-stage { position: fixed; inset: 0; z-index: 70; pointer-events: none; background: radial-gradient(circle at var(--cx, 50%) var(--cy, 50%), rgba(20, 10, 4, 0.5), transparent 45%); opacity: 0; transition: opacity 0.2s; }
+/* 주사위 연출: 보드 위로 던지는 입체 주사위 */
+.dice-stage { --ds: 64px; position: fixed; inset: 0; z-index: 70; pointer-events: none; overflow: hidden; background: radial-gradient(circle at var(--cx, 50%) var(--cy, 50%), rgba(20, 10, 4, 0.5), transparent 50%); opacity: 0; transition: opacity 0.2s; }
 .dice-stage.show { opacity: 1; }
 .dice-stage.leaving { background: transparent; transition: background 0.3s; }
-.dice-center { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 14px; }
-.dice-pair { display: flex; gap: 18px; transform-origin: center; }
-.die.big { width: 84px; height: 84px; border-radius: 18px; padding: 12px; box-shadow: 0 6px 0 #c8b897, 0 16px 30px rgba(0, 0, 0, 0.45); }
-.die.big.red { box-shadow: 0 6px 0 #8d2a1f, 0 16px 30px rgba(0, 0, 0, 0.45); }
-.die.big i { width: 15px; height: 15px; }
-.dice-pair.tumbling .die { animation: dice-tumble 0.32s linear infinite; }
-.dice-pair.tumbling .die.red { animation-duration: 0.27s; animation-direction: reverse; }
-@keyframes dice-tumble {
-  0% { transform: translateY(0) rotate(0deg); }
-  25% { transform: translateY(-26px) rotate(90deg); }
-  50% { transform: translateY(0) rotate(180deg); }
-  75% { transform: translateY(-14px) rotate(270deg); }
-  100% { transform: translateY(0) rotate(360deg); }
-}
-.dice-pair.landed .die { animation: dice-land 0.35s ease-out; }
-@keyframes dice-land { 0% { transform: scale(1.25); } 60% { transform: scale(0.94); } 100% { transform: scale(1); } }
-.dice-sum { font-family: var(--display); font-size: 40px; color: #fff; text-shadow: 0 3px 8px rgba(0, 0, 0, 0.6); opacity: 0; transform: scale(0.6); transition: opacity 0.2s, transform 0.25s; }
-.dice-sum.show { opacity: 1; transform: none; }
-.dice-sum.seven { color: #ffb3a6; }
+.dice-stage.thud .dice-field { animation: dice-shake 0.32s ease-out; }
+@keyframes dice-shake { 0% { translate: 0 0; } 20% { translate: -5px 4px; } 40% { translate: 5px -3px; } 60% { translate: -3px 2px; } 80% { translate: 2px -1px; } 100% { translate: 0 0; } }
+.dice-field { position: absolute; inset: 0; }
+.die-shadow { position: absolute; left: 0; top: 0; width: calc(var(--ds) * 1.1); height: calc(var(--ds) * 0.36); margin: calc(var(--ds) * -0.18) 0 0 calc(var(--ds) * -0.55); border-radius: 50%; background: radial-gradient(closest-side, rgba(0, 0, 0, 0.65), transparent); }
+.die3d { position: absolute; left: 0; top: 0; width: var(--ds); height: var(--ds); margin: calc(var(--ds) / -2) 0 0 calc(var(--ds) / -2); perspective: calc(var(--ds) * 8); will-change: transform; }
+.die3d .squash { width: 100%; height: 100%; transform-style: preserve-3d; transform-origin: 50% 90%; }
+.die3d .squash.landed { animation: dice-squash 0.34s ease-out; }
+@keyframes dice-squash { 0% { transform: scale(1.14, 0.82); } 45% { transform: scale(0.94, 1.08); } 100% { transform: none; } }
+.cube { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; }
+.cube .face, .cube .core { position: absolute; inset: 0; backface-visibility: hidden; }
+.cube .core { background: #d9cbb0; border-radius: 8%; }
+.cube .face { display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 15%; border-radius: 20%; background: radial-gradient(circle at 30% 25%, #ffffff, #f1e9da 70%, #ddd0b8); box-shadow: inset 0 0 0 1px rgba(150, 125, 90, 0.35), inset -3px -4px 8px rgba(120, 95, 60, 0.25); }
+.cube .face b { width: 64%; height: 64%; margin: auto; border-radius: 50%; visibility: hidden; background: radial-gradient(circle at 35% 30%, #4e3b2c, #1f140c); box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.5); }
+.cube .face b.on { visibility: visible; }
+.die3d.red .face { background: radial-gradient(circle at 30% 25%, #f08a72, #d24a36 60%, #a8301f); box-shadow: inset 0 0 0 1px rgba(110, 25, 15, 0.4), inset -3px -4px 8px rgba(90, 15, 5, 0.3); }
+.die3d.red .face b { background: radial-gradient(circle at 35% 30%, #ffffff, #f3e6d2); box-shadow: inset 0 -1px 1px rgba(120, 40, 20, 0.4); }
+.die3d.red .core { background: #b83a28; }
+/* 합계: 금빛 숫자가 빛줄기와 함께 튀어나온다 */
+.dice-total { position: absolute; transform: translate(-50%, -50%) scale(0); opacity: 0; display: flex; flex-direction: column; align-items: center; transition: transform 0.38s cubic-bezier(0.2, 1.8, 0.4, 1), opacity 0.15s; }
+.dice-total.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+.dice-total b { position: relative; font-family: var(--display); font-weight: 400; font-size: calc(var(--ds) * 1.3); line-height: 1; color: #ffe27a; background: linear-gradient(180deg, #fff6c4 10%, #ffd23f 55%, #f39a1c 90%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; -webkit-text-stroke: 3px #6b3a0c; paint-order: stroke fill; filter: drop-shadow(0 4px 0 #6b3a0c) drop-shadow(0 8px 14px rgba(0, 0, 0, 0.5)); }
+.dice-total small { position: relative; font-family: var(--display); font-size: calc(var(--ds) * 0.36); color: #fff; margin-top: 2px; text-shadow: 0 2px 0 #7a1d12, 0 4px 10px rgba(0, 0, 0, 0.5); }
+.dice-total small:empty { display: none; }
+.dice-total.seven b { background: linear-gradient(180deg, #ffd6cc 10%, #ff6a4d 55%, #c0261a 90%); -webkit-background-clip: text; background-clip: text; -webkit-text-stroke-color: #5a0f08; filter: drop-shadow(0 4px 0 #5a0f08) drop-shadow(0 8px 14px rgba(0, 0, 0, 0.5)); }
+.dice-total .rays { position: absolute; left: 50%; top: 45%; width: calc(var(--ds) * 3.2); height: calc(var(--ds) * 3.2); margin: calc(var(--ds) * -1.6) 0 0 calc(var(--ds) * -1.6); border-radius: 50%; background: repeating-conic-gradient(rgba(255, 228, 120, 0.55) 0 9deg, transparent 9deg 24deg); -webkit-mask: radial-gradient(closest-side, #000 25%, transparent); mask: radial-gradient(closest-side, #000 25%, transparent); animation: dice-rays 3s linear infinite; }
+.dice-total.seven .rays { background: repeating-conic-gradient(rgba(255, 120, 90, 0.5) 0 9deg, transparent 9deg 24deg); }
+@keyframes dice-rays { to { transform: rotate(360deg); } }
 
 /* 플레이어 상태 카드 */
 #players { grid-area: players; display: grid; grid-template-columns: repeat(var(--np, 4), minmax(0, 1fr)); gap: 6px; align-content: start; }
