@@ -188,11 +188,11 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
 #ticker .txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 #dice { display: flex; gap: 6px; min-height: 34px; }
-.die { width: 34px; height: 34px; background: linear-gradient(145deg, #ffffff, #ede4d3); border-radius: 8px; box-shadow: 0 3px 0 #c8b897, 0 5px 10px rgba(0, 0, 0, 0.35); display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 5px; }
-.die i { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); margin: auto; visibility: hidden; }
+.die { width: 34px; height: 34px; background: linear-gradient(145deg, #ffd85a, #eab423); border-radius: 9px; box-shadow: 0 3px 0 #b8861a, 0 5px 10px rgba(0, 0, 0, 0.35); display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 5px; }
+.die i { display: block; width: 6px; height: 6px; border-radius: 50%; background: #c4241c; margin: auto; visibility: hidden; }
 .die i.on { visibility: visible; }
-.die.red { background: linear-gradient(145deg, #e66b55, #c0392b); box-shadow: 0 3px 0 #8d2a1f, 0 5px 10px rgba(0, 0, 0, 0.35); }
-.die.red i { background: #fff6e8; }
+.die.red { background: linear-gradient(145deg, #e2483a, #b82018); box-shadow: 0 3px 0 #7d140e, 0 5px 10px rgba(0, 0, 0, 0.35); }
+.die.red i { background: #ffd84a; }
 
 /* 주사위 연출: 보드 위로 던지는 입체 주사위 */
 .dice-stage { --ds: 64px; position: fixed; inset: 0; z-index: 70; pointer-events: none; overflow: hidden; background: radial-gradient(circle at var(--cx, 50%) var(--cy, 50%), rgba(20, 10, 4, 0.5), transparent 50%); opacity: 0; transition: opacity 0.2s; }
@@ -202,19 +202,12 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
 @keyframes dice-shake { 0% { translate: 0 0; } 20% { translate: -5px 4px; } 40% { translate: 5px -3px; } 60% { translate: -3px 2px; } 80% { translate: 2px -1px; } 100% { translate: 0 0; } }
 .dice-field { position: absolute; inset: 0; }
 .die-shadow { position: absolute; left: 0; top: 0; width: calc(var(--ds) * 1.1); height: calc(var(--ds) * 0.36); margin: calc(var(--ds) * -0.18) 0 0 calc(var(--ds) * -0.55); border-radius: 50%; background: radial-gradient(closest-side, rgba(0, 0, 0, 0.65), transparent); }
-.die3d { position: absolute; left: 0; top: 0; width: var(--ds); height: var(--ds); margin: calc(var(--ds) / -2) 0 0 calc(var(--ds) / -2); perspective: calc(var(--ds) * 8); will-change: transform; }
-.die3d .squash { width: 100%; height: 100%; transform-style: preserve-3d; transform-origin: 50% 90%; }
+.die3d { position: absolute; left: 0; top: 0; width: var(--ds); height: var(--ds); margin: calc(var(--ds) / -2) 0 0 calc(var(--ds) / -2); will-change: transform; }
+.die3d .squash { position: relative; width: 100%; height: 100%; transform-origin: 50% 90%; }
 .die3d .squash.landed { animation: dice-squash 0.34s ease-out; }
 @keyframes dice-squash { 0% { transform: scale(1.14, 0.82); } 45% { transform: scale(0.94, 1.08); } 100% { transform: none; } }
-.cube { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; }
-.cube .face, .cube .core { position: absolute; inset: 0; backface-visibility: hidden; }
-.cube .core { background: #e2d6bf; }
-.cube .face { display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 15%; border-radius: 9%; background: radial-gradient(circle at 30% 25%, #ffffff, #f1e9da 70%, #e2d6bf); box-shadow: inset 0 0 0 1px rgba(150, 125, 90, 0.35), inset -3px -4px 8px rgba(120, 95, 60, 0.25); }
-.cube .face b { width: 64%; height: 64%; margin: auto; border-radius: 50%; visibility: hidden; background: radial-gradient(circle at 35% 30%, #4e3b2c, #1f140c); box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.5); }
-.cube .face b.on { visibility: visible; }
-.die3d.red .face { background: radial-gradient(circle at 30% 25%, #f08a72, #d24a36 60%, #a8301f); box-shadow: inset 0 0 0 1px rgba(110, 25, 15, 0.4), inset -3px -4px 8px rgba(90, 15, 5, 0.3); }
-.die3d.red .face b { background: radial-gradient(circle at 35% 30%, #ffffff, #f3e6d2); box-shadow: inset 0 -1px 1px rgba(120, 40, 20, 0.4); }
-.die3d.red .core { background: #b5382a; }
+/* 둥근 주사위는 캔버스에 그린다 (주사위 크기의 두 배 캔버스를 가운데에 둔다) */
+.die-canvas { position: absolute; left: calc(var(--ds) / -2); top: calc(var(--ds) / -2); width: calc(var(--ds) * 2); height: calc(var(--ds) * 2); }
 /* 합계: 금빛 숫자가 빛줄기와 함께 튀어나온다 */
 .dice-total { position: absolute; transform: translate(-50%, -50%) scale(0); opacity: 0; display: flex; flex-direction: column; align-items: center; transition: transform 0.38s cubic-bezier(0.2, 1.8, 0.4, 1), opacity 0.15s; }
 .dice-total.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
