@@ -202,12 +202,11 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
 @keyframes dice-shake { 0% { translate: 0 0; } 20% { translate: -5px 4px; } 40% { translate: 5px -3px; } 60% { translate: -3px 2px; } 80% { translate: 2px -1px; } 100% { translate: 0 0; } }
 .dice-field { position: absolute; inset: 0; }
 .die-shadow { position: absolute; left: 0; top: 0; width: calc(var(--ds) * 1.1); height: calc(var(--ds) * 0.36); margin: calc(var(--ds) * -0.18) 0 0 calc(var(--ds) * -0.55); border-radius: 50%; background: radial-gradient(closest-side, rgba(0, 0, 0, 0.65), transparent); }
-.die3d { position: absolute; left: 0; top: 0; width: var(--ds); height: var(--ds); margin: calc(var(--ds) / -2) 0 0 calc(var(--ds) / -2); will-change: transform; }
-.die3d .squash { position: relative; width: 100%; height: 100%; transform-origin: 50% 90%; }
-.die3d .squash.landed { animation: dice-squash 0.34s ease-out; }
-@keyframes dice-squash { 0% { transform: scale(1.14, 0.82); } 45% { transform: scale(0.94, 1.08); } 100% { transform: none; } }
-/* 둥근 주사위는 캔버스에 그린다 (주사위 크기의 두 배 캔버스를 가운데에 둔다) */
-.die-canvas { position: absolute; left: calc(var(--ds) / -2); top: calc(var(--ds) / -2); width: calc(var(--ds) * 2); height: calc(var(--ds) * 2); }
+/* 주사위는 화면 전체 크기 WebGL 캔버스에 그린다 */
+.dice-gl { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+/* WebGL을 못 쓰는 기기용 평면 주사위 */
+.die.fallback { position: absolute; left: 0; top: 0; width: 62px; height: 62px; padding: 10px; border-radius: 14px; }
+.die.fallback i { width: 11px; height: 11px; }
 /* 합계: 금빛 숫자가 빛줄기와 함께 튀어나온다 */
 .dice-total { position: absolute; transform: translate(-50%, -50%) scale(0); opacity: 0; display: flex; flex-direction: column; align-items: center; transition: transform 0.38s cubic-bezier(0.2, 1.8, 0.4, 1), opacity 0.15s; }
 .dice-total.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
