@@ -271,6 +271,7 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
 #prompt .cancel { margin-left: 8px; vertical-align: middle; }
 
 #side { grid-area: side; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+#supply-panel { display: none; }
 #hand { padding: 10px 12px 12px; }
 #hand h3 { margin: 0 0 8px; font-size: 16px; }
 .hand-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
@@ -295,7 +296,7 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
 .rcard[data-res='ore'] { --res: #7d8794; }
 .rcard img { width: 34px; height: 34px; background: #fffaf0; border-radius: 50%; padding: 2px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }
 .rcard .n { font-family: var(--display); font-size: 21px; line-height: 1.1; margin-top: 2px; }
-.rcard .nm { font-size: 11px; color: var(--muted); }
+.rcard .nm { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .rcard.zero { opacity: 0.45; filter: grayscale(0.4); }
 .rcard.gain { animation: pop 0.7s ease-out; }
 @keyframes pop { 0% { transform: translateY(-8px) scale(1.08); box-shadow: 0 0 0 4px var(--gold); } 100% { transform: none; } }
@@ -317,7 +318,9 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
 .piece.used { opacity: 0.22; filter: grayscale(1) brightness(0.6); }
 
 #actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 8px; padding: 2px 0 4px; }
-#actions .btn { width: 100%; }
+#actions .btn { width: 100%; flex-wrap: wrap; row-gap: 3px; }
+/* 버튼이 좁으면 낱말 중간이 아니라 비용 아이콘이 다음 줄로 내려간다 */
+#actions .btn .lbl { word-break: keep-all; }
 #actions .wide { grid-column: span 2; }
 #actions .hand-note { color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); text-align: center; font-size: 14px; }
 
@@ -408,6 +411,30 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
   .pcard.current { transform: translateX(-4px); }
   #side { overflow-y: auto; padding: 4px 4px 10px; }
   #board-wrap { padding: 0; }
+}
+
+/* PC: 보드 | 플레이어 상태 + 남은 말 | 행동 버튼 + 손패 — 오른쪽이 스크롤 없이 한 화면에 들어간다 */
+@media (min-width: 960px) {
+  #game-screen {
+    max-width: 1900px;
+    grid-template-columns: minmax(0, 1fr) clamp(250px, 21vw, 360px) clamp(250px, 22vw, 380px);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas: 'board top top' 'board players side' 'board supply side';
+  }
+  #players { min-height: 0; }
+  #side { padding: 0 4px 6px 0; }
+  #hand .supply { display: none; }
+  #supply-panel { display: block; grid-area: supply; align-self: start; padding: 8px 10px; min-width: 0; }
+  #supply-panel .supply { margin: 0; padding: 6px 8px 4px; }
+  #supply-panel .supply-name { width: 56px; }
+  #supply-panel .pieces { gap: 1px; }
+  #supply-panel .supply-row.road .piece { width: 10px; }
+}
+@media (min-width: 960px) and (max-width: 1179px) {
+  #supply-panel .supply-name { width: 50px; }
+  #supply-panel .piece { width: 24px; height: 24px; }
+  #supply-panel .supply-row.city .piece { width: 27px; height: 27px; }
+  #supply-panel .supply-row.road .piece { width: 8px; height: 26px; }
 }
 
 /* 가로로 긴 모바일: 보드가 왼쪽 열 높이를 전부 쓰고, 상단 바·플레이어·손패는 오른쪽 열에 */
