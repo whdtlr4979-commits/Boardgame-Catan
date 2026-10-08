@@ -3,12 +3,17 @@ import { TOPO, HEX_DY, CORNER_OFFSETS } from './board.js';
 import { PIPS, PLAYER_COLORS } from './constants.js';
 import { RES_COLORS, seeded, drawSettlement, drawCity, drawRoad, drawRobber, iconURL } from './art.js';
 import { paintTile, TILE_SCALE } from './terrain.js';
+import { pieceSprite, drawSprite } from './pieces3d.js';
 
 export const LOGICAL_W = 304;
 export const LOGICAL_H = 292;
 const OX = LOGICAL_W / 2;
 const OY = LOGICAL_H / 2;
 const TOKEN_R = 10;
+// 조각 말 크기: 모양 1단위가 보드 논리 좌표로 몇인지
+const BUILDING_UNIT = 14;
+const ROAD_UNIT = 11;
+const ROBBER_UNIT = 16;
 const NUMBER_FONT = 'Georgia, "Times New Roman", serif';
 // 바다 틀: 위아래가 평평한 큰 육각형 (실제 카탄의 바다 틀 모양)
 const FRAME_R = 151;
@@ -360,25 +365,33 @@ export class BoardRenderer {
       }
     }
 
-    for (const [e, p] of Object.entries(state.roads)) {
+    // 말: 입체로 미리 그려 둔 조각 말 그림을 붙인다 (WebGL이 없으면 2D 그림)
+    ctx.imageSmoothingQuality = 'high';
+    const road = (e, color) => {
       const [a, b] = TOPO.edges[e].v.map((v) => TOPO.vertices[v]);
-      drawRoad(ctx, a.x, a.y, b.x, b.y, PLAYER_COLORS[state.players[p].color], k);
-    }
+      const spr = pieceSprite('road', color.main, Math.atan2(b.y - a.y, b.x - a.x));
+      if (spr) drawSprite(ctx, spr, (a.x + b.x) / 2, (a.y + b.y) / 2, ROAD_UNIT / spr.length);
+      else drawRoad(ctx, a.x, a.y, b.x, b.y, color, k);
+    };
+    for (const [e, p] of Object.entries(state.roads)) road(e, PLAYER_COLORS[state.players[p].color]);
     if (view.ghostEdge != null) {
-      const [a, b] = TOPO.edges[view.ghostEdge].v.map((v) => TOPO.vertices[v]);
       ctx.globalAlpha = 0.6;
-      drawRoad(ctx, a.x, a.y, b.x, b.y, PLAYER_COLORS[view.ghostColor], k);
+      road(view.ghostEdge, PLAYER_COLORS[view.ghostColor]);
       ctx.globalAlpha = 1;
     }
 
     const rh = TOPO.hexes[state.board.robber];
-    drawRobber(ctx, rh.x - 15, rh.y + 7);
+    const robber = pieceSprite('robber');
+    if (robber) drawSprite(ctx, robber, rh.x - 15, rh.y + 8, ROBBER_UNIT);
+    else drawRobber(ctx, rh.x - 15, rh.y + 7);
 
     const sorted = Object.entries(state.buildings).sort((a, b) => TOPO.vertices[a[0]].y - TOPO.vertices[b[0]].y);
     for (const [v, b] of sorted) {
       const vv = TOPO.vertices[v];
       const color = PLAYER_COLORS[state.players[b.player].color];
-      if (b.type === 'city') drawCity(ctx, vv.x, vv.y, color);
+      const spr = pieceSprite(b.type, color.main);
+      if (spr) drawSprite(ctx, spr, vv.x, vv.y + 3, BUILDING_UNIT);
+      else if (b.type === 'city') drawCity(ctx, vv.x, vv.y, color);
       else drawSettlement(ctx, vv.x, vv.y, color);
     }
 
