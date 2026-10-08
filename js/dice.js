@@ -112,12 +112,16 @@ uniform mat4 uViewProj;
 uniform mat4 uModel;
 uniform mat3 uNormalMat;
 uniform vec2 uOffset;
-varying vec3 vWorld;
+uniform vec3 uEye;
+uniform float uViewScale;
+varying vec3 vView;
 varying vec3 vNormal;
 varying vec3 vLocal;
 void main() {
   vec4 w = uModel * vec4(aPos, 1.0);
-  vWorld = w.xyz;
+  // 눈까지의 방향은 정점에서 작게 줄여 넘긴다: 화면 픽셀 단위 그대로면 휴대폰 GPU의
+  // 낮은 정밀도(mediump)에서 길이 계산이 넘쳐 주사위가 까맣게 칠해진다
+  vView = (uEye - w.xyz) * uViewScale;
   vNormal = uNormalMat * aNorm;
   vLocal = aPos;
   gl_Position = uViewProj * w;
@@ -126,12 +130,15 @@ void main() {
 
 // 눈은 면 좌표에서 계산해 그린다 (오목하게 파인 느낌), 빛은 픽셀마다 Blinn-Phong + 가장자리 반사
 const FRAG = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
 precision mediump float;
+#endif
 uniform vec3 uBase;
 uniform vec3 uPip;
 uniform vec3 uLight;
-uniform vec3 uEye;
-varying vec3 vWorld;
+varying vec3 vView;
 varying vec3 vNormal;
 varying vec3 vLocal;
 void main() {
@@ -159,7 +166,7 @@ void main() {
 
   vec3 n = normalize(vNormal);
   vec3 l = normalize(uLight);
-  vec3 v = normalize(uEye - vWorld);
+  vec3 v = normalize(vView);
   vec3 hv = normalize(l + v);
   float diff = max(dot(n, l), 0.0);
   float spec = pow(max(dot(n, hv), 0.0), 70.0);
@@ -241,12 +248,13 @@ function createRenderer(canvas, W, H, camera) {
   gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 24, 0);
   gl.vertexAttribPointer(aNorm, 3, gl.FLOAT, false, 24, 12);
   const u = (name) => gl.getUniformLocation(prog, name);
-  const loc = { viewProj: u('uViewProj'), model: u('uModel'), normalMat: u('uNormalMat'), offset: u('uOffset'), base: u('uBase'), pip: u('uPip'), light: u('uLight'), eye: u('uEye') };
+  const loc = { viewProj: u('uViewProj'), model: u('uModel'), normalMat: u('uNormalMat'), offset: u('uOffset'), base: u('uBase'), pip: u('uPip'), light: u('uLight'), eye: u('uEye'), viewScale: u('uViewScale') };
   gl.uniformMatrix4fv(loc.viewProj, false, new Float32Array(camera.viewProj));
   gl.uniform2fv(loc.offset, camera.offset);
   // 빛은 왼쪽 위 앞쪽에서 온다
   gl.uniform3fv(loc.light, norm([-0.35, 1, 0.75]));
   gl.uniform3fv(loc.eye, camera.eye);
+  gl.uniform1f(loc.viewScale, 1 / Math.hypot(...camera.eye));
   gl.enable(gl.DEPTH_TEST);
   gl.viewport(0, 0, canvas.width, canvas.height);
   gl.clearColor(0, 0, 0, 0);

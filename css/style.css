@@ -487,6 +487,50 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
   .btn { font-size: 14px; }
 }
 
+/* 카카오톡 앱 안: 외부 브라우저로 열라는 안내 (가장 위) */
+#kakao-overlay { display: none; }
+.in-kakao #kakao-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  color: #fff;
+  background: radial-gradient(ellipse at 50% 40%, rgba(110, 75, 47, 0.98), rgba(40, 26, 16, 0.99));
+}
+.in-kakao #kakao-overlay .btn { text-decoration: none; }
+.rotate-note.small { font-size: 13px; line-height: 1.6; opacity: 0.75; }
+
+/* 휴대폰 세로 화면: 게임 대신 가로로 돌리라는 안내 */
+#rotate-overlay { display: none; }
+@media (orientation: portrait) and (pointer: coarse) and (max-width: 600px) {
+  body.in-game #rotate-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 95;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 24px;
+    text-align: center;
+    color: #fff;
+    background: radial-gradient(ellipse at 50% 40%, rgba(110, 75, 47, 0.97), rgba(40, 26, 16, 0.98));
+  }
+  body.in-game { overflow: hidden; }
+}
+.rotate-phone { width: 64px; height: 108px; border: 5px solid #fff; border-radius: 14px; position: relative; margin-bottom: 14px; animation: rotate-hint 2.4s ease-in-out infinite; }
+.rotate-phone i { position: absolute; left: 50%; bottom: 6px; width: 14px; height: 4px; margin-left: -7px; border-radius: 2px; background: #fff; }
+@keyframes rotate-hint { 0%, 20% { transform: rotate(0); } 50%, 75% { transform: rotate(-90deg); } 100% { transform: rotate(0); } }
+.rotate-title { margin: 0; font-family: var(--display); font-size: 22px; }
+.rotate-note { margin: 0 0 8px; opacity: 0.85; }
+
 @media (prefers-reduced-motion: reduce) {
   /* 주사위 연출(.dice-stage)은 설정과 상관없이 항상 움직인다 */
   *:not(.dice-stage):not(.dice-stage *),

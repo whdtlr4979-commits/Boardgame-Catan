@@ -10,6 +10,7 @@ import { h, $ } from './dom.js';
 import { RULES_HTML } from './rules.js';
 import { dieEl, startRoll } from './dice.js';
 import { serverAvailable, createRoom, joinRoom, OnlineSession } from './net.js';
+import { goLandscape, leaveLandscape, canLockLandscape } from './orientation.js';
 
 const SAVE_KEY = 'pixel-catan-save-v1';
 const PREF_KEY = 'pixel-catan-prefs-v1';
@@ -171,11 +172,14 @@ function renderSeats() {
 
 function showScreen(id) {
   for (const el of document.querySelectorAll('.screen')) el.classList.toggle('hidden', el.id !== id);
+  // 게임 화면은 휴대폰에서 가로로만 (세로면 안내 화면이 가린다)
+  document.body.classList.toggle('in-game', id === 'game-screen');
 }
 
 function showStart() {
   clearTimeout(app.aiTimer);
   closeModal();
+  leaveLandscape();
   showScreen('start-screen');
   $('#btn-continue').classList.toggle('hidden', !loadSave());
   $('#btn-rejoin').classList.toggle('hidden', !loadOnlineSession());
@@ -1519,6 +1523,7 @@ function init() {
     renderSeats();
   }));
   $('#btn-new').addEventListener('click', () => {
+    goLandscape();
     if (app.prefs.seats.slice(0, app.prefs.playerCount).some((s) => !s.isAI)) {
       startNewGame();
       return;
@@ -1530,11 +1535,20 @@ function init() {
           h('button', { class: 'btn primary', onclick: () => { closeModal(); startNewGame(); } }, '관전하기')));
     }, { dismissable: true });
   });
-  $('#btn-continue').addEventListener('click', continueGame);
+  $('#btn-continue').addEventListener('click', () => {
+    goLandscape();
+    continueGame();
+  });
+  // 가로 고정을 지원하는 기기는 안내 화면에서 바로 가로 전체 화면으로
+  $('#btn-landscape').classList.toggle('hidden', !canLockLandscape());
+  $('#btn-landscape').addEventListener('click', goLandscape);
   $('#btn-rules').addEventListener('click', () => showRules());
   $('#btn-menu').addEventListener('click', showMenu);
   $('#btn-add-ai').addEventListener('click', () => app.net?.lobby('addAI').catch((err) => toast(err.message)));
-  $('#btn-start-online').addEventListener('click', () => app.net?.lobby('start').catch((err) => toast(err.message)));
+  $('#btn-start-online').addEventListener('click', () => {
+    goLandscape();
+    app.net?.lobby('start').catch((err) => toast(err.message));
+  });
   $('#btn-leave-room').addEventListener('click', () => {
     const net = app.net;
     if (!net) return showStart();
