@@ -27,9 +27,9 @@ const lerp = (a, b, t) => a + (b - a) * t;
 
 function makeDie(red, size) {
   const cube = h('div', { class: 'cube' });
-  // 둥근 모서리 틈을 메우는 조금 작은 속 정육면체 (면과 겹치거나 서로 교차하지 않는다)
-  const inner = size / 2 - 2;
-  for (const [, rot] of FACES) cube.append(h('i', { class: 'core', style: { inset: '2px', transform: `${rot} translateZ(${inner}px)` } }));
+  // 둥근 모서리 뒤를 메우는 1px 작은 속 정육면체 (면과 겹치거나 서로 교차하지 않는다)
+  const inner = size / 2 - 1;
+  for (const [, rot] of FACES) cube.append(h('i', { class: 'core', style: { inset: '1px', transform: `${rot} translateZ(${inner}px)` } }));
   for (const [n, rot] of FACES) {
     const face = h('div', { class: 'face', style: { transform: `${rot} translateZ(${size / 2}px)` } });
     for (let i = 0; i < 9; i++) face.append(h('b', { class: PIP_LAYOUT[n].includes(i) ? 'on' : '' }));
@@ -65,7 +65,9 @@ export function startRoll({ speed = 1, target = '#dice', over = '#board' } = {})
 
   const field = h('div', { class: 'dice-field' });
   const total = h('div', { class: 'dice-total' }, h('span', { class: 'rays' }), h('b'), h('small'));
-  const stage = h('div', { class: 'dice-stage', 'aria-hidden': 'true', style: { '--ds': `${size}px` } }, field, total);
+  const stage = h('div', { class: 'dice-stage', 'aria-hidden': 'true' }, field, total);
+  // CSS 변수는 style 객체로는 안 들어가므로 setProperty로 넣는다 (면 위치 계산과 상자 크기가 같아야 꽉 찬 정육면체가 된다)
+  stage.style.setProperty('--ds', `${size}px`);
   stage.style.setProperty('--cx', `${cx}px`);
   stage.style.setProperty('--cy', `${cy}px`);
   total.style.left = `${cx}px`;

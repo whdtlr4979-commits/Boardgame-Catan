@@ -208,13 +208,13 @@ h1, h2, h3, .btn, .tabs button, .seg button { font-family: var(--display); font-
 @keyframes dice-squash { 0% { transform: scale(1.14, 0.82); } 45% { transform: scale(0.94, 1.08); } 100% { transform: none; } }
 .cube { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; }
 .cube .face, .cube .core { position: absolute; inset: 0; backface-visibility: hidden; }
-.cube .core { background: #d9cbb0; border-radius: 8%; }
-.cube .face { display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 15%; border-radius: 20%; background: radial-gradient(circle at 30% 25%, #ffffff, #f1e9da 70%, #ddd0b8); box-shadow: inset 0 0 0 1px rgba(150, 125, 90, 0.35), inset -3px -4px 8px rgba(120, 95, 60, 0.25); }
+.cube .core { background: #e2d6bf; }
+.cube .face { display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 15%; border-radius: 9%; background: radial-gradient(circle at 30% 25%, #ffffff, #f1e9da 70%, #e2d6bf); box-shadow: inset 0 0 0 1px rgba(150, 125, 90, 0.35), inset -3px -4px 8px rgba(120, 95, 60, 0.25); }
 .cube .face b { width: 64%; height: 64%; margin: auto; border-radius: 50%; visibility: hidden; background: radial-gradient(circle at 35% 30%, #4e3b2c, #1f140c); box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.5); }
 .cube .face b.on { visibility: visible; }
 .die3d.red .face { background: radial-gradient(circle at 30% 25%, #f08a72, #d24a36 60%, #a8301f); box-shadow: inset 0 0 0 1px rgba(110, 25, 15, 0.4), inset -3px -4px 8px rgba(90, 15, 5, 0.3); }
 .die3d.red .face b { background: radial-gradient(circle at 35% 30%, #ffffff, #f3e6d2); box-shadow: inset 0 -1px 1px rgba(120, 40, 20, 0.4); }
-.die3d.red .core { background: #b83a28; }
+.die3d.red .core { background: #b5382a; }
 /* 합계: 금빛 숫자가 빛줄기와 함께 튀어나온다 */
 .dice-total { position: absolute; transform: translate(-50%, -50%) scale(0); opacity: 0; display: flex; flex-direction: column; align-items: center; transition: transform 0.38s cubic-bezier(0.2, 1.8, 0.4, 1), opacity 0.15s; }
 .dice-total.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
